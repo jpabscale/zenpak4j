@@ -1,0 +1,13 @@
+# JitPack build config. JitPack checks out the repo, runs this, and publishes the
+# maven-publish artifacts under com.github.jpabscale.zenpak4j:<module>:<version>.
+#
+# JDK 25 is required for the FFM-based oodle-loader; sdkman resolves Temurin 25.
+# Tests are skipped (-x test): they need upstream repak/retoc fixture packs, which
+# are fetched separately via scripts/download-fixtures.sh / ./gradlew downloadFixtures.
+jdk:
+  - 25
+before_install:
+  - sdk install java 25-tem
+  - sdk use java 25-tem
+install:
+  - ./gradlew --console=plain publishToMavenLocal -x test

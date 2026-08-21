@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "*"
+  pull_request:
+
+jobs:
+  test:
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    name: linux-amd64 }
+          - { os: ubuntu-24.04-arm, name: linux-arm64 }
+          - { os: macos-15,         name: macos-amd64 }
+          - { os: macos-latest,     name: macos-arm64 }
+          - { os: windows-latest,   name: windows-amd64 }
+          - { os: windows-11-arm,   name: windows-arm64 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25 (Liberica)
+        uses: actions/setup-java@v5
+        with:
+          distribution: liberica
+          java-version: "25"
+          cache: gradle
+
+      - name: Fetch test fixtures (pinned trumank/repak + trumank/retoc SHAs)
+        shell: bash
+        run: ./scripts/download-fixtures.sh
+
+      - name: Build and test
+        shell: bash
+        run: ./gradlew build --no-daemon
+
+      - name: Debug test failures
+        if: failure()
+        shell: bash
+        run: |
+          grep -ho 'message="[^"]*"' repak/build/test-results/test/*.xml retoc/build/test-results/test/*.xml zenpak/build/test-results/test/*.xml 2>/dev/null | sort -u | head -5
+
+  release:
+    name: Release retoc/repak CLI fat jars
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25 (Liberica)
+        uses: actions/setup-java@v5
+        with:
+          distribution: liberica
+          java-version: "25"
+          cache: gradle
+
+      - name: Build CLI fat jars
+        # drop-in replacements for the rust binaries: same invocation surface
+        # (retoc -g <game> ..., repak [-g <game>] ...), pure JVM, no oodle native lib needed
+        run: ./gradlew --no-daemon repakJar retocJar
+
+      - name: Create GitHub Release
+        if: ${{ !env.ACT }}
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            build/libs/retoc.jar
+            build/libs/repak.jar
+          generate_release_notes: true

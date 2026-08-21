@@ -1,0 +1,173 @@
+{
+ "_comment": "Approved parity divergences for zenpak4j. ONLY the user may instruct additions/modifications/revocations. Agents must never edit this file (see AGENTS.md / README.md Porting discipline). Tools bucket matching entries as EXC (visible, never silent) and --check-stale flags entries that no longer diverge for revocation.",
+ "exceptions": [
+  {
+   "id": "EXC-001",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "RepakContext/RetocContext instance vs Rust OnceLock<Option<String>> global GAME_ID"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-19",
+   "reason": "Rust repak/repack uses a process-wide OnceLock<Option<String>> GAME_ID (global.rs) set once via get_game_id(default). For in-process JVM reuse (the main motivation for zenpak4j \u2014 load repak/retoc as a library without subprocess fork), a global singleton is unsafe: concurrent paks with different game_id (e.g. VisionsofMana vs default) would race on OnceLock. Kotlin therefore threads an explicit RepakContext(game_id: String?) / RetocContext instance through PakBuilder/PakWriter (writer/write_file/write_entry/write_index), PakBuilder.reader/reader_with_version (added 2026-08-20 so parallel unpack workers receive the game-id explicitly instead of reading thread-local globals), PakReader (read_file/into_pakwriter), Entry (write_file), PartialEntry (build_entry/get_serialized_size), and FIoContainerHeader::deserialize. The wire format is identical; only the call-site signature diverges. Markers //@parity:on EXC-001 / //@parity:off EXC-001 wrap the RepakContext class definition (repak/global.kt); the individual `context: RepakContext?` params are unwrapped \u2014 the exception covers the threading design, not each param.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-002",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "Windows arm64 Oodle native lib handling"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-19",
+   "reason": "Upstream oodle_loader (Rust) has a single #[cfg(windows)] OodlePlatform win/redist/oo2core_9_win64.dll for all Windows (x86_64 only artifact in WorkingRobot/OodleUE). On Windows arm64 the Rust code would attempt SymbolLookup on the x64 dll and fail with opaque UnsatisfiedLinkError. Kotlin oodle_loader/lib.kt detects os.arch aarch64/arm64 on win and throws a clear OodleError.LibLoading('Windows arm64 native Oodle not available (only x64 oo2core_9_win64.dll) \u2014 use x64 emulation (ARM64EC) or disable Oodle') instead. Wire format and other platforms (linux x64/aarch64/arm, mac x64/arm64 via Rosetta, win x64) are identical. Wrapped in //@parity:on EXC-002 / //@parity:off EXC-002 around current_platform() Windows arm64 branch.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-003",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "Blake3 via BouncyCastle vs Rust blake3 crate"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Retoc Toc chunk_metas blake3 hashing (retoc/src/lib.rs) uses Rust blake3 1.8.2. Kotlin retoc/lib.kt and iostore_writer use org.bouncycastle:bcprov-jdk18on 1.78.1 MessageDigest('BLAKE3') fallback (or SHA-256 fallback where Blake3 not available) for chunk hash. The hash is only for verification, not for wire compatibility of the test fixtures (which are uncompressed/encrypted without blake3 in the exercised paths). No fixture diverges; if a future fixture uses blake3-compressed chunks the Kotlin hash would need exact Rust blake3 output to match. Recorded as approved until exact port (e.g. io.github.rhash:blake3) is adopted. Wrapped in //@parity:on EXC-003 / //@parity:off EXC-003 around hasher in retoc/iostore_writer.kt.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-004",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "Deterministic container ordering for byte-identical repak/retoc archives"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Rust repak_cli pack uses rayon par_bridge + sync_channel(0) rendezvous where file data is written in parallel completion order (non-deterministic), and retoc to-zen uses pariter + Channel completion order for chunks. For byte-identical containers when input files are byte-identical, Kotlin instead collects all (path, PartialEntry) pairs via parallelStream, sorts by path (TreeMap), then writes in sorted order before Pak::write / IoStoreWriter::write. The loose uasset/uexp are already byte-identical via repak unpack -s and retoc unpack, but the container bytes (pak offset, toc compression_blocks offset, footer hash, utoc header) would otherwise differ; deterministic ordering makes the container itself byte-identical for identical inputs, which is required for .demo.sb/.demo.soa archive comparison. Wrapped in //@parity:on EXC-004 / //@parity:off EXC-004 around the sort-then-write blocks in actions/repak_actions/RepakActions.kt (pack) and actions/retoc_actions/RetocActions.kt (to-zen) \u2014 relocated verbatim from repak-cli/main.kt and retoc-cli/main.kt by EXC-014; retoc/iostore_writer.kt has no markers.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-005",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "repak fork game-id support (GAME_ID VisionsOfMana, compression_index_size override, repak-cli -g/--game-id)"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream repak@355b5f6 has no game-id concept: compression_index_size matches only on Version::V8A and no -g/--game-id CLI option exists. The port lives at the fork tip repak@9f8dbd5, whose global.rs (GAME_ID OnceLock, GAME_ID_VISIONS_OF_MANA = \"VisionsofMana\", get_game_id) drives an override in entry.rs compression_index_size (Some(VisionsofMana) -> U8 even for non-V8A versions) and repak-cli main.rs (root -g/--game-id option calling get_game_id(args.game_id)). Kotlin implements the fork behavior: repak/global.kt GAME_ID_VISIONS_OF_MANA/get_game_id/global_game_id/set_game_id, entry.kt compression_index_size game-id override, and the -g/--game-id option plumbing (effective_game_id + get_game_id calls; now in repak-cli/main.kt, see EXC-014). Unlike Rust's process-wide OnceLock, global_game_id is backed by a ThreadLocal so concurrent in-process ZenPakService calls with different game ids cannot race or cross-contaminate; all reads happen on the calling thread (compression_index_size is consumed from PakWriter.write_entry/write_index, never from parallelStream workers). Divergence from the pinned SHA is intentional (fork-tip behavior); wire format is unchanged for all other games. Wrapped in //@parity:on EXC-005 / //@parity:off EXC-005 around the game-id regions.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-006",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "repak-cli fork multi-input unpack (split_paths list, first-match priority, 'from N inputs')"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream repak_cli@355b5f6 unpack takes a single input .pak path. The fork repak@9f8dbd5 restructured unpack to accept an OS path-separated list (clap ArgAction::Append on the positional, std::env::split_paths flat_map, empty list -> Ok(()), first-match priority via selected_paths HashSet, per-input readers, 'Unpacked N files to M from K inputs' message). Kotlin actions/repak_actions/RepakActions.kt (relocated from repak-cli/main.kt by EXC-014) implements the fork flow: split_paths helper, inputs flat_map + empty-return + inputs[0] output default, selected_paths dedup across inputs, per-input PakReader loops, and the multi-input completion message. This is a fork-tip behavioral divergence from the pinned SHA (single-input semantics); single-input invocations behave identically to the pin. Wrapped in //@parity:on EXC-006 / //@parity:off EXC-006 around the multi-input regions in actions/repak_actions/RepakActions.kt (and the multi-positional input option in repak-cli/main.kt UnpackCommand).",
+   "status": "active"
+  },
+  {
+   "id": "EXC-007",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "retoc fork FF7R2 game-id wire special-cases (module-global game_id, container_header pad -1, unknown u32 read/write)"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream retoc@885a8da has no game-id concept: FIoContainerHeader version <= Initial deserializes names_buffer directly and serializes a fixed 0 pad word; FFilePackageStoreEntry writes 0u32 padding. The fork retoc@e7c2711 adds retoc/src/global.rs (FF7R2_GAME_ID = \"End\", get_game_id OnceLock) and special-cases the FF7R2 \"End\" game-id in container_header.rs: deserialize reads one extra u32 before names_buffer, serialize writes a 0u32 before names_buffer, and the Initial-version load_order pad is -1i32 instead of 0. Kotlin implements the fork behavior: retoc/global.kt FF7R2_GAME_ID const, container_header.kt module-global set_global_game_id/get_game_id (mirrors the fork's process-global OnceLock; the FF7R2 read branches use it at :812-816, :938-945, :679-684). Unlike Rust's OnceLock, the Kotlin global is ThreadLocal-backed so concurrent in-process ZenPakService calls with different game ids cannot race or cross-contaminate; all reads happen on the calling thread (FIoContainerHeader ser/de runs on the action's calling thread, never inside worker pools), and callers must set it per call (null clears). Note: EXC-001 threads an instance RetocContext for API signature parity, but the FF7R2 fork behavior itself requires the process-wide game-id value, so the module-global is approved here under EXC-007 (set at CLI startup via -g/--game-id, or per call by ZenPakService). Divergence from the pinned SHA is intentional (fork-tip behavior); wire format is identical for all other games. Wrapped in //@parity:on EXC-007 / //@parity:off EXC-007 around the FF7R2 regions.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-008",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "retoc fork name_map strict FName hash assert (stricter than pin)"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream retoc@885a8da ('Do not panic on non-standard FName hash') reads the FName hash_version u64 and tolerates non-standard hashes (comment: 'non-standard FName hash is not actually fatal'). The fork retoc@e7c2711 restored the strict assert_eq!(hash_version, FNAME_HASH_ALGORITHM_ID) in name_map.rs read_name_batch. Kotlin retoc/name_map.kt:257-258 follows the fork with check(hash_version == FNAME_HASH_ALGORITHM_ID). This is stricter than the pinned SHA: a container with a non-standard FName hash version that parses at the pin throws in the port. Intentional fork-tip divergence; recorded so the stricter behavior is not silently relaxed. Wrapped in //@parity:on EXC-008 / //@parity:off EXC-008 around the check in retoc/name_map.kt.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-009",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "retoc fork iostore container-path APIs (open_with_container_paths, collect_container_paths, container_id/mount_point accessors, allow_mixed version mixing)"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream retoc@885a8da iostore.rs opens a single container (IoStoreContainer::open) and has no container_id()/mount_point() accessors on IoStoreTrait; open_paths accepts only same-version containers (no --override-toc-version mixing). The fork retoc@e7c2711 adds open_with_container_paths, collect_container_paths (directory listing with sort_container_name ordering), container_id()/mount_point() on IoStoreTrait, and open_paths allow_mixed (toc_version_override) version/header-version mixing checks. Kotlin retoc/iostore.kt:88-117, :161-162, :265-309 implements the fork behavior. Divergence from the pinned SHA is intentional (fork-tip behavior); single-container same-version opens behave identically to the pin. Wrapped in //@parity:on EXC-009 / //@parity:off EXC-009 around the fork regions in retoc/iostore.kt.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-010",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "retoc fork iostore_writer container-id/header APIs (with_container_id, with_container_header, write_chunk_auto)"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream retoc@885a8da iostore_writer.rs has only IoStoreWriter::new with a fixed container id derived from the toc file name and no container-header reuse. The fork retoc@e7c2711 adds with_container_id(toc_path, ..., container_id: Option<FIoContainerId>), with_container_header(toc_path, ..., container_header: Option<FIoContainerHeader>), and write_chunk_auto (chunk-id/path/data/store-entry convenience used by pack-raw to preserve store entries). Kotlin retoc/iostore_writer.kt:235-292 and :34 implements the fork behavior; new() delegates to with_container_id with null. Divergence from the pinned SHA is intentional (fork-tip behavior); plain new() behaves identically to the pin. Wrapped in //@parity:on EXC-010 / //@parity:off EXC-010 around the fork regions in retoc/iostore_writer.kt.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-011",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "retoc fork to-zen features (UnknownPackage null sentinel, add_localized_package_dependencies, --game-store, passthrough external chunks, companion .pak index)"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream retoc@885a8da zen_asset_conversion.rs has no /Engine/UnknownPackage null sentinel, no add_localized_package_dependencies, no game_package_names parameter, and retoc_cli to-zen has no --game-store option, no plain-file passthrough as external chunks, and no companion .pak index write. The fork retoc@e7c2711 adds all of these (UnknownPackage -> FPackageObjectIndex::create_null, L10N dependency injection for Initial-era packages, --game-store package-name harvesting, EIoChunkType::ExternalFile/BulkData passthrough for non-asset files, empty .pak index next to the utoc). Kotlin implements the fork behavior: retoc/zen_asset_conversion.kt:362, :1151-1184 and actions/retoc_actions/RetocActions.kt (relocated from retoc-cli/main.kt by EXC-014; --game-store harvesting, passthrough chunks, companion .pak regions). Divergence from the pinned SHA is intentional (fork-tip behavior); assets without localized variants or plain files convert identically to the pin. Wrapped in //@parity:on EXC-011 / //@parity:off EXC-011 around the fork regions. Determinism refinement (2026-08-21): the fork iterates game_package_names/base_packages HashSets in per-process randomized order, so localized dependency records (and downstream offsets) are not reproducible run-to-run for packages with /Game/L10N/ variants (e.g. SB CSS_PC_EVE); the Kotlin region iterates both sets SORTED instead \u2014 identical dependency set, stable output. Byte-parity with the rust fork for these packages requires the same ordering upstream.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-012",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "retoc-cli fork features (unpack dir/list + --filter/--no-parallel, unpack-raw/pack-raw manifest metadata, to-legacy multi-input + selected_package_ids, -g/--game-id)"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Pinned upstream retoc_cli@885a8da takes a single container path, has no --filter/--no-parallel on unpack, unpack-raw/pack-raw manifest lacks container_id/container_header_version/mount_point and pack-raw does not preserve the ContainerHeader chunk, to-legacy has no multi-input list or package dedup, and no -g/--game-id option exists. The fork retoc@e7c2711 adds: unpack accepting a directory or path-separated list with --filter/--no-parallel; unpack-raw manifest with container_id, container_header_version and mount_point; pack-raw preserving the source ContainerHeader chunk (or creating one with the same version) and reusing store entries via write_chunk_auto; to-legacy multi-input containers with first-match selected_package_ids; root -g/--game-id calling set_global_game_id. Kotlin implements all fork behaviors: the unpack/to-legacy/unpack-raw/pack-raw flows in actions/retoc_actions/RetocActions.kt (relocated from retoc-cli/main.kt by EXC-014) and the root -g/--game-id option in retoc-cli/main.kt RetocCli/build_config_from_parent. Divergence from the pinned SHA is intentional (fork-tip behavior); single-input invocations behave identically to the pin. Wrapped in //@parity:on EXC-012 / //@parity:off EXC-012 around the fork regions in actions/retoc_actions/RetocActions.kt and retoc-cli/main.kt.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-013",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "oodle-loader fetch_oodle cache-dir search + download flow"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Rust oodle_loader/src/lib.rs:188-198 fetch_oodle resolves current_exe().with_file_name(name) only, downloads with ureq (no HTTP-status check), verifies SHA-256, writes. The Kotlin port deliberately uses a JVM-appropriate multi-candidate cache: ~/.cache/zenpak4j, java.io.tmpdir, cwd build/tmp + build/oodle, user.dir, and finally the current-exe parent (Rust-parity fallback); it picks the first existing candidate or the first writable parent, follows redirects, rejects non-200 responses, verifies the platform SHA-256, creates parent dirs and writes, and normalizes a double slash in the download URL. Candidate locations and HTTP handling diverge from the pinned SHA (and the fork) so packaged JVM apps work where the executable directory is read-only (e.g. /usr/bin) and downloads succeed behind redirects; the loaded Oodle library (2.9.10, all 5 platform hashes) is identical. Wrapped in //@parity:on EXC-013 / //@parity:off EXC-013 around fetch_oodle in oodle-loader/lib.kt.",
+   "status": "active"
+  },
+  {
+   "id": "EXC-014",
+   "tool": "both",
+   "scope": {
+    "kind": "behavior",
+    "target": "CLI action layer relocated to the shared :actions module (repak_actions/retoc_actions) used by both CLIs and the zenpak in-process service"
+   },
+   "approved_by": "jpabscale",
+   "approved_on": "2026-08-20",
+   "reason": "Rust keeps the action implementations inside the CLI crates (repak_cli/src/main.rs, retoc_cli/src/main.rs fn info/list/hash_list/unpack/pack/get and action_*); there is no library-level action layer. Kotlin extracts the same statements into the :actions module (packages com.github.jpabscale.zenpak4j.repak_actions / .retoc_actions) so the Clikt commands and ZenPakService (the in-process API for automod) share one implementation instead of the service duplicating the pipelines (which had drifted: missing shader asset-info reads, swallowed errors, divergent filters). Statement parity is unchanged \u2014 the same Rust refs moved with the code and the EXC-004/006/011/012 marker regions were relocated verbatim; docs/port-tracker.md rows for the CLI crates now point at the actions files. The divergence is structural only: the actions live outside the CLI modules and are public API. Error handling moves to the Rust shape: action functions throw (Rust fns return Result) and the repak-cli Clikt commands catch -> handle_error (Rust main handles Err), replacing the previous catch-inside-action wrapping. No wire-format impact.",
+   "status": "active"
+  }
+ ]
+}

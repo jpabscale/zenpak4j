@@ -1,0 +1,18 @@
+Copyright (c) 2026 jpabscale
+
+This project is a Kotlin/JVM port of trumank/repak
+(https://github.com/trumank/repak) and trumank/retoc
+(https://github.com/trumank/retoc), which are dual-licensed under the
+MIT License and the Apache License 2.0.
+
+Licensed under either of
+
+  * Apache License, Version 2.0 (LICENSE-APACHE)
+  * MIT license (LICENSE-MIT)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in the work by you, as defined in the Apache-2.0
+license, shall be dual licensed as above, without any additional terms or
+conditions.

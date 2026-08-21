@@ -1,0 +1,28 @@
+* text=auto
+
+# POSIX scripts must keep LF — CRLF breaks them (download-fixtures.sh, gradlew)
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows batch files need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Sources stay LF
+*.kt text eol=lf
+*.kts text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+
+# Binaries — never normalize (test fixtures and native artifacts)
+*.jar binary
+*.pak binary
+*.utoc binary
+*.ucas binary
+*.dylib binary
+*.so binary
+*.dll binary
+*.exe binary
+*.png binary

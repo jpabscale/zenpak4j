@@ -1,0 +1,31 @@
+[versions]
+# pinned upstream (track trumank, port starts from jpabscale forks)
+repak-upstream-sha = "355b5f62f51959c7cc6dd5a51708646ef483065d"
+repak-fork-sha = "9f8dbd5a3d8a2f76dd4b5d6ae29efaede25bd97f"
+retoc-upstream-sha = "885a8dae740cb1ce1e41ff2e74f67f9f0c118237"
+retoc-fork-sha = "e7c27112ec3ab3ae1e39cb3770d960ee04c456e8"
+
+kotlin = "2.3.0"
+gradle-wrapper = "9.7.0"
+detekt = "1.23.8"
+clikt = "5.0.3"
+coroutines = "1.9.0"
+zstd-jni = "1.5.7-3"
+lz4-java = "1.8.0"
+junit = "5.11.4"
+ksp = "2.2.20-2.0.3"
+
+[libraries]
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
+zstd-jni = { module = "com.github.luben:zstd-jni", version.ref = "zstd-jni" }
+lz4-java = { module = "org.lz4:lz4-java", version.ref = "lz4-java" }
+junit-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
+junit-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
+junit-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }

@@ -1,0 +1,12 @@
+This project includes material developed by the following third parties:
+
+- trumank/repak (https://github.com/trumank/repak) - Copyright 2024 Truman Kilen, spuds.
+  Licensed under the MIT License OR the Apache License 2.0 (see LICENSE-MIT / LICENSE-APACHE).
+- trumank/retoc (https://github.com/trumank/retoc) - Copyright 2025 Truman Kilen and Archengius.
+  Licensed under the MIT License (see LICENSE-MIT).
+
+The oodle-loader module downloads Oodle compression native libraries at runtime from
+WorkingRobot/OodleUE (https://github.com/WorkingRobot/OodleUE), which redistributes the
+Oodle SDK binaries built by Epic Games (proprietary Oodle license — see the README there).
+These binaries are hash-pinned, never committed to this repository, and are used under
+Epic's Sdk redistribution terms as provided by that mirror.

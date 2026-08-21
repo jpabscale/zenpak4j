@@ -1,0 +1,37 @@
+# Gradle
+.gradle/
+build/
+out/
+gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# Fixtures (downloaded on demand)
+build/fixtures/
+fixtures/
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Kotlin
+*.class
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Wrapper jar not stored (downloaded on demand)
+# gradle-wrapper.jar is ignored above
+
+# Detekt
+detekt-report.html
+
+# Oodle native libs (downloaded on demand via FFM)
+liboo2*.so*
+liboo2*.dylib
+oo2core*.dll
+*.so.9
+__pycache__/
+tools/__pycache__/
