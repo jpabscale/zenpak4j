@@ -167,11 +167,20 @@ fun check_hash(data: ByteArray, platform: OodlePlatform) {
 
 //@parity:on EXC-013
 // Rust: oodle_loader/src/lib.rs:188  fetch_oodle
+// Embedder hook: when set before the first oodle() load, its directory is probed FIRST (and used
+// as the download target) so every consumer of this JVM shares one native-cache location.
+@Volatile
+var preferred_oodle_dir: Path? = null
+
 fun fetch_oodle(): Path {
     val platform = current_platform()
     val name = platform.name
     // Prefer cache/tmp over repo polluting locations (user.dir, current_exe)
     val candidates = mutableListOf<Path>()
+    // 0) embedder-provided unified cache dir (EXC-013): when set it OWNS the lookup —
+    // probed first and used as the download target, legacy locations are skipped
+    try { preferred_oodle_dir?.let { candidates.add(it.resolve(name)) } } catch (_: Exception) {}
+    if (preferred_oodle_dir == null) {
     // 1) XDG cache / home cache (preferred, persistent)
     try { candidates.add(Path.of(System.getProperty("user.home")).resolve(".cache/zenpak4j/$name")) } catch (_: Exception) {}
     // 2) java.io.tmpdir (ephemeral but writable)
@@ -193,6 +202,7 @@ fun fetch_oodle(): Path {
                 candidates.add(parent.resolve(name))
             }
         } catch (_: Exception) {}
+    }
     }
 
     // pick first existing, or first writable parent

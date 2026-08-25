@@ -1,4 +1,4 @@
-// ZenPakService — thread-safe in-process API for repak/retoc, for automod's GenerateMod
+// ZenPakService — thread-safe in-process API for repak/retoc, for JVM embedders
 // Replaces subprocess fork (retocExe/repakExe via os.proc) with direct library calls.
 // All methods delegate to the shared action layer in :actions (repak_actions/retoc_actions,
 // EXC-014) — the exact same code the CLIs run, so behavior cannot drift from the CLI.
@@ -41,7 +41,7 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
 /**
- * Thread-safe in-process service for repak/retoc, to be used by automod's GenerateMod
+ * Thread-safe in-process service for repak/retoc, letting JVM embedders work in-process
  * instead of forking retoc/repak binaries. Each method delegates to the shared :actions
  * implementations and is safe to call concurrently from multiple GenerateMod threads.
  *
@@ -49,6 +49,15 @@ import java.nio.file.StandardOpenOption
  * uasset4j's in-JVM pipeline (52s vs 2:38 on StellarBlade .demo.sb).
  */
 object ZenPakService {
+
+    /**
+     * Point Oodle at a shared cache directory before the first oodle load: its dir is probed
+     * first and used as the download target, so every consumer of this JVM shares one native
+     * lib location instead of per-tool copies (EXC-013).
+     */
+    fun set_oodle_dir(path: Path?) {
+        com.github.jpabscale.zenpak4j.oodle_loader.preferred_oodle_dir = path
+    }
 
     // --- repak ---
 
@@ -358,7 +367,7 @@ object ZenPakService {
     }
 
     /**
-     * retoc to-zen from a caller-supplied file source (automod in-memory seam): the exact
+     * retoc to-zen from a caller-supplied file source (embedder in-memory seam): the exact
      * action_to_zen pipeline, but loose-file reads go through the [list_files]/[read]/
      * [read_opt] functions instead of FSFileReader(args.input). Paths are container-relative
      * ("SB/Content/..."), slash-normalized; [read_opt] returns null for absent files.
@@ -402,7 +411,7 @@ object ZenPakService {
         )
     }
 
-    // Convenience for automod's GenerateMod: probe whether in-process Oodle can load.
+    // Convenience for embedders: probe whether in-process Oodle can load.
     // Uncompressed/zlib workflows work even when this returns false.
     fun is_available(): Boolean = try {
         oodle()
