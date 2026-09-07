@@ -20,6 +20,8 @@ import com.github.jpabscale.zenpak4j.repak_actions.pack
 import com.github.jpabscale.zenpak4j.repak_actions.unpack
 import com.github.jpabscale.zenpak4j.retoc.AesKey as RetocAesKey
 import com.github.jpabscale.zenpak4j.retoc.Config
+import com.github.jpabscale.zenpak4j.retoc.EIoContainerHeaderVersion
+import com.github.jpabscale.zenpak4j.retoc.EIoStoreTocVersion
 import com.github.jpabscale.zenpak4j.retoc.EngineVersion
 import com.github.jpabscale.zenpak4j.retoc.FGuid
 import com.github.jpabscale.zenpak4j.retoc.UEPath
@@ -187,6 +189,9 @@ object ZenPakService {
      * [inputDir] into a .utoc/.ucas container at [outputUtoc]. Delegates to
      * retoc_actions.action_to_zen — identical pipeline to the CLI incl. shader asset-info
      * harvesting (--game-store), passthrough chunks and the companion .pak index.
+     * [override_toc_version]/[override_container_header_version] mirror the CLI's
+     * --override-toc-version/--override-container-header-version: the written container uses
+     * them instead of [engine_version]'s versions.
      */
     fun retoc_to_zen(
         inputDir: Path,
@@ -197,6 +202,8 @@ object ZenPakService {
         aes_key: String? = null,
         game_id: String? = null,
         verbose: Boolean = false,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
     ) {
         set_global_game_id(game_id)
         // AES keys ride the Config (used when reading the game store), like the CLI's -a.
@@ -204,6 +211,8 @@ object ZenPakService {
             if (!aes_key.isNullOrBlank()) {
                 aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
             }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
         }
         action_to_zen(
             ActionToZen(
@@ -225,14 +234,21 @@ object ZenPakService {
      * retoc to-legacy: extract packages from the container at [inputFile] into loose
      * uasset/uexp files under [outputDir]. Shaders stay disabled for GenerateMod
      * (no_shaders=true); script objects follow the CLI default.
+     * [override_toc_version]/[override_container_header_version] mirror the CLI's
+     * --override-toc-version/--override-container-header-version: any non-null override
+     * permits mixed-version composites (e.g. a mod .utoc over a game store of a different
+     * TOC version); reads stay per-container.
      */
     fun retoc_to_legacy(
         inputFile: Path,
         outputDir: Path,
         engine_version: EngineVersion,
         game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
     ) {
-        retoc_to_legacy(inputFile, outputDir, engine_version, null, game_id)
+        retoc_to_legacy(inputFile, outputDir, engine_version, null, game_id,
+            override_toc_version, override_container_header_version)
     }
 
     fun retoc_to_legacy(
@@ -241,8 +257,12 @@ object ZenPakService {
         engine_version: EngineVersion,
         filter: String?,
         game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
     ) {
-        retoc_to_legacy(listOf(inputFile), outputDir, engine_version, filter, game_id)
+        retoc_to_legacy(listOf(inputFile), outputDir, engine_version, filter, game_id,
+            override_toc_version = override_toc_version,
+            override_container_header_version = override_container_header_version)
     }
 
     fun retoc_to_legacy(
@@ -252,12 +272,16 @@ object ZenPakService {
         filter: String?,
         aes_key: String? = null,
         game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
             if (!aes_key.isNullOrBlank()) {
                 aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
             }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
         }
         action_to_legacy(
             ActionToLegacy(
@@ -283,6 +307,10 @@ object ZenPakService {
      * retoc unpack: dump all chunks (path-addressable ones) of the container(s) into
      * [outputDir]. Delegates to retoc_actions.action_unpack; [aes_key] is inserted under
      * FGuid() like the CLI's -a.
+     * [override_toc_version]/[override_container_header_version] mirror the CLI's
+     * --override-toc-version/--override-container-header-version: any non-null override
+     * permits mixed-version composites (e.g. a mod .utoc over a game store of a different
+     * TOC version); reads stay per-container.
      */
     fun retoc_unpack(
         utocFile: Path,
@@ -290,8 +318,11 @@ object ZenPakService {
         filter: String? = null,
         aes_key: String? = null,
         game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
     ) {
-        retoc_unpack(listOf(utocFile), outputDir, filter, aes_key, game_id)
+        retoc_unpack(listOf(utocFile), outputDir, filter, aes_key, game_id,
+            override_toc_version, override_container_header_version)
     }
 
     fun retoc_unpack(
@@ -300,12 +331,16 @@ object ZenPakService {
         filter: String? = null,
         aes_key: String? = null,
         game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
             if (!aes_key.isNullOrBlank()) {
                 aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
             }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
         }
         action_unpack(
             RetocActionUnpack(
@@ -325,6 +360,10 @@ object ZenPakService {
      * bytes) instead of writing to disk. Shaders stay disabled, like [retoc_to_legacy].
      * Thread safety: [on_file] is invoked from the actions' worker pool and must be
      * thread-safe; paths are container-relative ("SB/Content/..."), slash-normalized.
+     * [override_toc_version]/[override_container_header_version] mirror the CLI's
+     * --override-toc-version/--override-container-header-version: any non-null override
+     * permits mixed-version composites (e.g. a mod .utoc over a game store of a different
+     * TOC version); reads stay per-container.
      */
     fun retoc_to_legacy_extract(
         inputFiles: List<Path>,
@@ -332,6 +371,8 @@ object ZenPakService {
         filters: List<String> = emptyList(),
         aes_key: String? = null,
         game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
         on_file: (path: String, allow_compress: Boolean, data: ByteArray) -> Unit,
     ) {
         set_global_game_id(game_id)
@@ -339,6 +380,8 @@ object ZenPakService {
             if (!aes_key.isNullOrBlank()) {
                 aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
             }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
         }
         val writer = object : com.github.jpabscale.zenpak4j.retoc.FileWriterTrait {
             override fun write_file(path: String, allow_compress: Boolean, data: ByteArray) =
@@ -371,6 +414,9 @@ object ZenPakService {
      * action_to_zen pipeline, but loose-file reads go through the [list_files]/[read]/
      * [read_opt] functions instead of FSFileReader(args.input). Paths are container-relative
      * ("SB/Content/..."), slash-normalized; [read_opt] returns null for absent files.
+     * [override_toc_version]/[override_container_header_version] mirror the CLI's
+     * --override-toc-version/--override-container-header-version: the written container uses
+     * them instead of [engine_version]'s versions.
      */
     fun retoc_to_zen_from(
         list_files: () -> List<String>,
@@ -382,12 +428,16 @@ object ZenPakService {
         game_store: List<Path>? = null,
         aes_key: String? = null,
         game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
             if (!aes_key.isNullOrBlank()) {
                 aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
             }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
         }
         val input = object : com.github.jpabscale.zenpak4j.retoc.FileReaderTrait {
             override fun read(path: UEPath): ByteArray = read(path)

@@ -5,6 +5,7 @@ import com.github.jpabscale.zenpak4j.repak.RepakError
 import com.github.jpabscale.zenpak4j.repak.Version
 import com.github.jpabscale.zenpak4j.retoc.Config
 import com.github.jpabscale.zenpak4j.retoc.EIoChunkType
+import com.github.jpabscale.zenpak4j.retoc.EIoStoreTocVersion
 import com.github.jpabscale.zenpak4j.retoc.EngineVersion
 import com.github.jpabscale.zenpak4j.retoc.FIoChunkId
 import com.github.jpabscale.zenpak4j.retoc.open
@@ -229,7 +230,7 @@ class ZenPakServiceTest {
                 }
 
                 val info = ZenPakService.repak_info(pak)
-                assertEquals(versionMajorFor(v).toString(), info["version_major"], "version_major for $v$suffix")
+                assertEquals(versionMajorFor(v), info["version_major"], "version_major for $v$suffix")
                 assertEquals(mount, info["mount_point"], "mount_point for $v$suffix")
                 assertEquals("false", info["encrypted_index"], "encrypted_index for $v$suffix")
                 if (suffix == "") assertEquals("None", info["compression"], "compression for $v plain")
@@ -461,6 +462,36 @@ class ZenPakServiceTest {
         assertTrue(Files.exists(out.resolve("x.txt")), "first container's chunk wins")
         assertEquals("from A", Files.readString(out.resolve("x.txt")))
         assertFalse(Files.exists(out.resolve("y.txt")), "second container's colliding chunk shadowed")
+    }
+
+    @Test
+    fun test_retoc_mixed_toc_versions_override() {
+        // Containers of different TOC versions refuse to composite without an override
+        // (EXC-009 Rust parity); override_toc_version permits the mix, like the CLI's
+        // --override-toc-version. B is written with a forced older TOC version so the pair
+        // is mixed without needing game fixtures.
+        val work = tempDir("zenpaksvc_mixed")
+        val inA = work.resolve("inA"); Files.createDirectories(inA)
+        Files.writeString(inA.resolve("x.txt"), "from A")
+        val inB = work.resolve("inB"); Files.createDirectories(inB)
+        Files.writeString(inB.resolve("y.txt"), "from B")
+
+        val utocA = work.resolve("a.utoc")
+        val utocB = work.resolve("b.utoc")
+        ZenPakService.retoc_to_zen(inputDir = inA, outputUtoc = utocA, engine_version = EngineVersion.UE5_5)
+        ZenPakService.retoc_to_zen(inputDir = inB, outputUtoc = utocB, engine_version = EngineVersion.UE5_5,
+            override_toc_version = EIoStoreTocVersion.PartitionSize)
+
+        assertThrows<IllegalArgumentException> {
+            ZenPakService.retoc_unpack(
+                inputFiles = listOf(utocA, utocB), outputDir = tempDir("zenpaksvc_mixed_fail"))
+        }
+
+        val out = tempDir("zenpaksvc_mixed_out")
+        ZenPakService.retoc_unpack(inputFiles = listOf(utocA, utocB), outputDir = out,
+            override_toc_version = EIoStoreTocVersion.PartitionSize)
+        assertEquals("from A", Files.readString(out.resolve("x.txt")))
+        assertEquals("from B", Files.readString(out.resolve("y.txt")))
     }
 
     // ------------------------------------------------------------------
