@@ -3,5 +3,5 @@ plugins {
 }
 
 dependencies {
-    api("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
+    api("org.jetbrains.kotlin:kotlin-stdlib:2.4.20")
 }

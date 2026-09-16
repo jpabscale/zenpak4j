@@ -1,3 +1,4 @@
+// Ported from repak (MIT OR Apache-2.0) — Copyright (c) 2024 Truman Kilen, spuds
 // Rust: repak/tests/test.rs
 package com.github.jpabscale.zenpak4j.repak
 

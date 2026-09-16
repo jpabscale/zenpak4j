@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 package com.github.jpabscale.zenpak4j.retoc
 
 import org.junit.jupiter.api.Test

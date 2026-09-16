@@ -1,3 +1,4 @@
+// Copyright (c) 2026 jpabscale — original code (not part of the repak/retoc port)
 // ZenPakService — thread-safe in-process API for repak/retoc, for JVM embedders
 // Replaces subprocess fork (retocExe/repakExe via os.proc) with direct library calls.
 // All methods delegate to the shared action layer in :actions (repak_actions/retoc_actions,

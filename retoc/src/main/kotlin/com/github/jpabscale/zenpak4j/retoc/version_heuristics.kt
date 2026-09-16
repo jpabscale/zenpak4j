@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: retoc/src/version_heuristics.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "unused", "RedundantVisibilityModifier", "TooManyFunctions", "LongMethod", "ComplexMethod", "MagicNumber", "ReturnCount", "LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "UnnecessaryVariable", "SpellCheckingInspection", "EnumEntryName", "MemberVisibilityCanBePrivate")
 

@@ -7,8 +7,8 @@ A **Kotlin/JVM port of [`repak`](https://github.com/trumank/repak) and [`retoc`]
 
 > **Performance** — the in-JVM pipeline avoids per-asset subprocess round-trips: automod's `.pak` / `IoStore` stages fork `repak`/`retoc` binaries today, paying process spawn + IPC + temp-dir I/O per pak. As a library, `zenpak4j` can be loaded **in-process** by the JVM tooling that currently subprocesses the Rust binaries, eliminating the fork and allowing zero-copy `ByteArray` handoff.
 
-> **Ported repak commit: `355b5f62f51959c7cc6dd5a51708646ef483065d`** (`fix: skip deleted PAK entries…`) and **port-lives at `jpabscale/repak@9f8dbd5`** (`Updated version.` + `ab3e873` multi-input lists).
-> **Ported retoc commit: `885a8dae740cb1ce1e41ff2e74f67f9f0c118237`** (`Do not panic on non-standard FName hash`) and **port-lives at `jpabscale/retoc@e7c2711`** (`Update locked package versions` + 10 ahead of upstream `mixed-version` etc.).
+> **Ported repak commit: `355b5f62f51959c7cc6dd5a51708646ef483065d`** (`fix: skip deleted PAK entries…`).
+> **Ported retoc commit: `885a8dae740cb1ce1e41ff2e74f67f9f0c118237`** (`Do not panic on non-standard FName hash`).
 >
 > All Rust code is ported from these exact trees. The differential oracle — the built Rust `repak`/`retoc` binaries used to verify parity — must match these commits. When a newer upstream tip is adopted, bump these SHAs everywhere (see [Keeping up with repak/retoc](#keeping-up-with-repakretoc)).
 
@@ -82,7 +82,7 @@ The port follows a strict **parity contract** so that a ported file is a mechani
 - **Statement-level parity is a hard rule.** Every Rust statement, branch, call, and loop appears, in order, in the Kotlin method — translated only through the mappings in [`docs/mapping.md`](docs/mapping.md). *Functional* parity (same output) is necessary but never sufficient; a restructured port is rejected and reworked to restore the Rust shape. Only a statement-parallel port keeps upstream diffs cheap.
 - **Names and paths mirror Rust.** `repak/repak/src/pak.rs` → `repak/src/main/kotlin/.../repak/pak.kt`, `retoc/retoc/src/zen.rs` → `retoc/src/main/kotlin/.../retoc/zen.kt`; `struct`/`enum`/`fn`/`field` names preserved verbatim (`snake_case` kept, `rg "fun read_encoded"` parity check). Detekt `PackageNaming` allows `_` (`oodle_loader`, `repak_cli`).
 - **`tools/audit_parity.py`** audits every file marked `ported` in [`docs/port-tracker.md`](docs/port-tracker.md): every Rust `pub` member must exist on the Kotlin side. Green at milestone close.
-- **Approved parity exceptions.** A deliberate, user-approved divergence (e.g. `RepakContext` instance vs `OnceLock` global, or fork-tip features absent from the pinned SHAs — `EXC-005`..`EXC-012` in [`docs/port-tracker.md`](docs/port-tracker.md)) may be recorded — and only there — in [`docs/parity-exceptions.json`](docs/parity-exceptions.json). Each entry carries approval metadata (`approved_by`, `approved_on`, `reason`) and can only be added/modified/revoked on explicit user instruction. The exception code is wrapped in `//@parity:on <id>` / `//@parity:off <id>` markers; `tools/audit_parity.py` verifies markers are balanced. `tools/sweep.py --check-stale` reports exceptions whose fixtures no longer diverge.
+- **Approved parity exceptions.** A deliberate, user-approved divergence (e.g. `RepakContext` instance vs `OnceLock` global, or port-native features beyond the pinned SHAs, originally carried by the retired `jpabscale` forks — `EXC-005`..`EXC-012` in [`docs/port-tracker.md`](docs/port-tracker.md)) may be recorded — and only there — in [`docs/parity-exceptions.json`](docs/parity-exceptions.json). Each entry carries approval metadata (`approved_by`, `approved_on`, `reason`) and can only be added/modified/revoked on explicit user instruction. The exception code is wrapped in `//@parity:on <id>` / `//@parity:off <id>` markers; `tools/audit_parity.py` verifies markers are balanced. `tools/sweep.py --check-stale` reports exceptions whose fixtures no longer diverge.
 - **Algorithmic-complexity parity.** A Kotlin method that is functionally equivalent but asymptotically slower than its Rust counterpart is a parity violation even when every asset `MATCHES` and member names align (lookup vs `toSet()` rebuild, loop nesting, guard checks).
 
 See [`docs/mapping.md`](docs/mapping.md) for the full translation table and [`AGENTS.md`](AGENTS.md) for agent rules.
@@ -91,8 +91,8 @@ See [`docs/mapping.md`](docs/mapping.md) for the full translation table and [`AG
 
 Functional parity is enforced by differential testing against the pinned Rust oracles:
 
-- **Repak corpus** — `repak/tests/packs/*.pak` (48 combos `V5`/`V7`/`V8A`/`V8B`/`V9`/`V11` × `compress`/`encrypt`/`encryptindex`) + `pack/root/*` + `test.png`/`test.txt`; `PakTest` `66` tests (`read` mount/version/files/content, `write` roundtrip, `rewrite_index`, `roundtrip` `none`/`zlib`/`gzip`/`zstd`/`lz4`/`oodle` `300 KiB`)
-- **Retoc corpus** — `retoc/tests/UE*` (`UE4.22`/`UE4.27`/`UE5.0`/`UE5.3`/`UE5.4`/`UE5.5`/`UE5.6` + `issues/issue7`/`18`): `ContainerHeader` `5` (`104740` exact), `AssetRegistry` `8` (`43s` `UE4.22` `149k` names `HashMap`), `CompactBinary` `2` (`22522` `packagestore.manifest`), `Toc` `8`/`IStore` `3`, `LegacyAsset` `5` (`BP_Table_Lamp`/`Randy`), `Zen` `1` (`SPR_UI_Battle`), `ZenAssetConversion` `2` (`10` fixtures `UE5.4`/`5.5`/`5.6`), `AssetConversion` `2` (`Randy`/`BP_Table_Lamp` `uzenasset→legacy`), `ScriptObjects` `2` (`30977`/`23393`), `ShaderLibrary` `6` (`Global`/`NuclearNightmare`)
+- **Repak corpus** — `repak/tests/packs/*.pak` (48 combos `V5`/`V7`/`V8A`/`V8B`/`V9`/`V11` × `compress`/`encrypt`/`encryptindex`) + `pack/root/*` + `test.png`/`test.txt`; `PakTest` `84` tests (`read` mount/version/files/content, `write` roundtrip, `rewrite_index`, `roundtrip` `none`/`zlib`/`gzip`/`zstd`/`lz4`/`oodle` `300 KiB`)
+- **Retoc corpus** — `retoc/tests/UE*` (`UE4.22`/`UE4.27`/`UE5.0`/`UE5.3`/`UE5.4`/`UE5.5`/`UE5.6` + `issues/issue7`/`18`): `ContainerHeader` `5` (`104740` exact), `AssetRegistry` `8` (`43s` `UE4.22` `149k` names `HashMap`), `CompactBinary` `2` (`22522` `packagestore.manifest`), `Toc` `8`/`IStore` `3`, `LegacyAsset` `5` (`BP_Table_Lamp`/`Randy`), `Zen` `1` (`SPR_UI_Battle`), `ZenAssetConversion` `2` (`10` fixtures `UE5.4`/`5.5`/`5.6`), `AssetConversion` `4` (`Randy`/`BP_Table_Lamp` `uzenasset→legacy` + `2` `EXC-015` regressions), `ScriptObjects` `2` (`30977`/`23393`), `ShaderLibrary` `6` (`Global`/`NuclearNightmare`)
 - **Round-trips** — `to-zen` `uasset+uexp → uzenasset` + `to-legacy` `uzenasset → uasset+uexp` must be stable; bytes after `header_size` compared
 - **JUnit 5** — `repak:test` + `retoc:test` via `./gradlew test` (`--enable-native-access=ALL-UNNAMED` for FFM)
 - **Corpus sweep** — `python3 tools/sweep.py` analog runs JVM `repak.jar`/`retoc.jar` vs Rust `repak`/`retoc` `info`/`list`/`unpack`/`to-zen` on every `*.pak`/`*.utoc` and byte-compares output (future `tools/` parity harness, same as `uasset4j` `tools/sweep.py`)
@@ -104,14 +104,14 @@ The oracle binaries are the built Rust `repak`/`retoc` at the pinned commits, ru
 
 Because the port is statement-parallel, adopting a newer upstream release is mechanical:
 
-1. **Re-pin** — update the pinned SHAs in this `README`, `docs/mapping.md` header, `docs/port-tracker.md`, and `gradle/libs.versions.toml` (`repakUpstreamSha`/`retocUpstreamSha`) + `gradle.properties` (`repak.pinned.sha`/`retoc.pinned.sha`).
+1. **Re-pin** — update the pinned SHAs in this `README`, `docs/mapping.md` header, `docs/port-tracker.md`, and `gradle/libs.versions.toml` (`repak-upstream-sha`/`retoc-upstream-sha`).
 2. **Diff upstream** — `git -C <repak clone> diff <old-sha>..<new-sha> -- repak/repak/src` and `git -C <retoc clone> diff <old-sha>..<new-sha> -- retoc/retoc/src` and port each changed Rust file. Each file is a localized, statement-level translation; most diffs are small (new `Version` variant, `EIoStoreTocVersion` gate, new `Compression`).
 3. **Update the mapping** — any new Rust construct gets a `docs/mapping.md` entry before it is ported.
 4. **Regenerate the oracle** — rebuild Rust `repak`/`retoc` from the new pin and re-run `gradle test` until `DIFF 0`.
 5. **Update the tests** — fold in any new `Cargo` `#[test]` cases into the ported JUnit suite.
 6. **Run the audit** — `python3 tools/audit_parity.py` until `PARITY AUDIT: GREEN`.
 
-The port is pinned to `repak@355b5f6` + `retoc@885a8da`; the forks live at `../repak` (`jpabscale/repak@9f8dbd5` `ab3e873` multi-input) and `../retoc` (`jpabscale/retoc@e7c2711` `mixed-version`).
+The port tracks upstream `repak@355b5f6` + `retoc@885a8da` only; the `jpabscale/*` forks are retired (port work lives here, with port-specific behavior approved in [`docs/parity-exceptions.json`](docs/parity-exceptions.json)).
 
 ## Publishing
 
@@ -138,7 +138,7 @@ docs/parity-exceptions.json                                   # approved diverge
 
 ## License
 
-The ported code is derived from [`repak`](https://github.com/trumank/repak) (`MIT OR Apache-2.0`, Copyright (c) trumank and contributors) and [`retoc`](https://github.com/trumank/retoc) (`MIT`, Copyright (c) trumank and contributors). The repo ships [LICENSE](LICENSE) with the original texts and notices, plus its own copyright line, and every ported file carries an attribution header (`Ported from repak (MIT OR Apache-2.0)` / `Ported from retoc (MIT)`). New parts (CLI wrappers, `RepakContext`/`RetocContext` instance, fat-jar wiring) are also MIT.
+The ported code is derived from [`repak`](https://github.com/trumank/repak) (`MIT OR Apache-2.0`, Copyright (c) trumank and contributors) and [`retoc`](https://github.com/trumank/retoc) (`MIT`, Copyright (c) trumank and contributors). The repo ships [LICENSE](LICENSE) with the original texts and notices, plus its own copyright line. Every ported file carries an attribution header (`Ported from repak (MIT OR Apache-2.0) — Copyright (c) 2024 Truman Kilen, spuds` / `Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius`); new parts carry `// Copyright (c) 2026 jpabscale — original code (not part of the repak/retoc port)`. New parts (CLI wrappers, `RepakContext`/`RetocContext` instance, fat-jar wiring) are also MIT.
 
 The Oodle lodge (`liboo2*`) is **proprietary** (RAD Game Tools, now Epic) — `WorkingRobot/OodleUE` is a convenience mirror (`2.9.10` `ed7e...` etc.) used only for `fetch_oodle()` `HttpClient` `Redirect.ALWAYS` `SHA-256` download to `~/.cache/zenpak4j`; it is not redistributed with the published artifact. `zstd` (`BSD`/`GPLv2` `zstd-jni` `JNI`), `LZ4` (`BSD` `lz4-java`), `flate2` (`MIT`/`Apache` `java.util.zip`) are open.
 

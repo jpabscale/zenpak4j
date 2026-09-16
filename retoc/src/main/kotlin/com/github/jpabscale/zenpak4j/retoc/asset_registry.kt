@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: retoc/src/asset_registry.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "unused", "RedundantVisibilityModifier", "TooManyFunctions", "LongMethod", "ComplexMethod", "SpellCheckingInspection", "MemberVisibilityCanBePrivate", "MagicNumber", "ThrowsCount", "TooGenericExceptionCaught", "ReturnCount", "LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "UnnecessaryVariable", "MaxLineLength")
 

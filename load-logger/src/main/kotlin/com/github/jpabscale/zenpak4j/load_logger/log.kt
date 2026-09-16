@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: load_logger/src/log.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "unused", "SpellCheckingInspection")
 

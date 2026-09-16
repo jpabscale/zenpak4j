@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: retoc/src/asset_conversion.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "unused", "RedundantVisibilityModifier", "TooManyFunctions", "LongMethod", "ComplexMethod", "EnumEntryName", "SpellCheckingInspection", "MagicNumber", "MemberVisibilityCanBePrivate", "ReturnCount", "LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "UnnecessaryVariable", "ThrowsCount", "TooGenericExceptionCaught", "LongParameterList", "LargeClass", "ComplexCondition")
 
@@ -518,7 +519,29 @@ fun resolve_cell_package_import(package_cache: FZenPackageContext, package_heade
 // Rust: retoc/src/asset_conversion.rs:379
 fun resolve_package_import_internal_legacy(package_cache: FZenPackageContext, package_header: FZenPackageHeader, import: FPackageObjectIndex): ResolvedZenImport {
     for (imported_package_id in package_header.imported_packages) {
-        val resolved_import_package = package_cache.lookup(imported_package_id)
+        //@parity:on EXC-015
+        // Upstream aborts the whole scan when one imported package fails to
+        // load (? on lookup): every later import then degrades to a placeholder
+        // even when its own target package is present and resolvable. Skip
+        // unloadable packages instead so each import resolves (or fails) on its
+        // own merits. Genuinely missing targets still fail below, keeping the
+        // EXC-011 placeholder path unchanged.
+        val resolved_import_package = try {
+            package_cache.lookup(imported_package_id)
+        } catch (e: Exception) {
+            // The cached "already failed" marker repeats on every later
+            // resolution attempt, so only the first failure is reported (same
+            // suppression the caller-level handler uses).
+            val message = e.message ?: ""
+            if (!message.contains("failed loading previously")) {
+                info(
+                    package_cache.log,
+                    "Skipping unloadable imported package $imported_package_id while resolving import $import for package ${package_header.package_name()}: $message"
+                )
+            }
+            continue
+        }
+        //@parity:off EXC-015
         val potential_imported_export = resolved_import_package.export_map.find { it.legacy_global_import_index() == import }
         if (potential_imported_export != null) {
             return resolve_package_export_internal(package_cache, resolved_import_package, potential_imported_export)

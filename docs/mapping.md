@@ -5,20 +5,20 @@
 
 ## 0. Pinned upstream
 
-| Repo | Pinned `trumank` SHA | Fork start SHA | File to bump | Check |
-|------|----------------------|----------------|--------------|-------|
-| `trumank/repak` | `355b5f62f51959c7cc6dd5a51708646ef483065d` | `9f8dbd5a3d8a2f76dd4b5d6ae29efaede25bd97f` | `gradle/libs.versions.toml` (`repakUpstreamSha`) + `scripts/pin-check.sh` | `git ls-remote https://github.com/trumank/repak refs/heads/master` |
-| `trumank/retoc` | `885a8dae740cb1ce1e41ff2e74f67f9f0c118237` | `e7c27112ec3ab3ae1e39cb3770d960ee04c456e8` | `gradle/libs.versions.toml` (`retocUpstreamSha`) + `scripts/pin-check.sh` | `git fetch https://github.com/trumank/<repo> master && git log --oneline <pinned>..FETCH_HEAD` |
+| Repo | Pinned `trumank` SHA | File to bump | Check |
+|------|----------------------|--------------|-------|
+| `trumank/repak` | `355b5f62f51959c7cc6dd5a51708646ef483065d` | `gradle/libs.versions.toml` (`repak-upstream-sha`) + `scripts/pin-check.sh` | `git ls-remote https://github.com/trumank/repak refs/heads/master` |
+| `trumank/retoc` | `885a8dae740cb1ce1e41ff2e74f67f9f0c118237` | `gradle/libs.versions.toml` (`retoc-upstream-sha`) + `scripts/pin-check.sh` | `git fetch https://github.com/trumank/<repo> master && git log --oneline <pinned>..FETCH_HEAD` |
 
-Diff on update: `git fetch https://github.com/trumank/<repo> master && git log --oneline <pinned>..FETCH_HEAD`. Fixtures are **not committed** — resolved via sibling `../repak` / `../retoc` or `build/fixtures` downloaded from the pinned SHA (`scripts/download-fixtures.sh`, `gradle/libs.versions.toml` `repakUpstreamSha`).
+Diff on update: `git fetch https://github.com/trumank/<repo> master && git log --oneline <pinned>..FETCH_HEAD`. Fixtures are **not committed** — resolved via sibling `../repak` / `../retoc` or `build/fixtures` downloaded from the pinned SHA (`scripts/download-fixtures.sh`, `gradle/libs.versions.toml` `repak-upstream-sha`). The `jpabscale/*` forks are retired; port-specific behavior lives in the port and is approved in `docs/parity-exceptions.json`.
 
 ## 1. Build & toolchain
 
 | Rust | Kotlin | Notes |
 |------|--------|-------|
 | `Cargo.toml` `resolver="2"` workspace | `settings.gradle.kts` + `gradle/libs.versions.toml` + `gradle-wrapper.properties` | `group com.github.jpabscale.zenpak4j`, `version 0.1.0-SNAPSHOT` |
-| `rust-toolchain.toml` `stable` | `Kotlin 2.3.0` + `Gradle 9.7.0` + `Java 25` toolchain | `kotlin { jvmToolchain(25) }` + `java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }` (FFM `java.lang.foreign` final in 22+, requires `25`); bytecode `JVM_21` fallback via `Kotlin 2.3.0` toolchain, `--enable-native-access=ALL-UNNAMED` for tests |
-| `cargo test` | `gradle check` (`:repak:test` `66` + `:retoc:test` `43`, `detekt` `0` smells) | `useJUnitPlatform()` + `junit-platform-launcher`, fixtures via `FileChannel` / `SeekableByteChannel` |
+| `rust-toolchain.toml` `stable` | `Kotlin 2.4.20` + `Gradle 9.7.0` + `Java 25` toolchain | `kotlin { jvmToolchain(25) }` + `java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }` (FFM `java.lang.foreign` final in 22+, requires `25`); bytecode `JVM_21` fallback via `Kotlin 2.4.20` toolchain, `--enable-native-access=ALL-UNNAMED` for tests |
+| `cargo test` | `gradle check` (`:repak:test` `85` + `:retoc:test` `47`, `detekt` `0` smells) | `useJUnitPlatform()` + `junit-platform-launcher`, fixtures via `FileChannel` / `SeekableByteChannel` |
 
 ## 2. Types
 
@@ -112,7 +112,7 @@ Diff on update: `git fetch https://github.com/trumank/<repo> master && git log -
 - **Wrapper jar not stored**: `gradle/wrapper/gradle-wrapper.jar` `.gitignore`, `gradlew`/`gradlew.bat` stored with `scripts/bootstrap-wrapper.sh` (`curl` `services.gradle.org`/`github` `gradle-wrapper.jar` on demand), `distributionUrl https://services.gradle.org/distributions/gradle-9.7.0-bin.zip` (`gradle-wrapper.properties`).
 - **Detekt** `1.23.8` `config/detekt.yml` `buildUponDefaultConfig false` minimal: `naming.FunctionNaming '[a-z][a-zA-Z0-9_]*'`, `PackageNaming '[a-z][a-zA-Z0-9_]*(\.[a-z][a-zA-Z0-9_]*)*'` (allows `oodle_loader`/`repak_cli` `_`), `complexity`/`style`/`comments`/`coroutines`/`empty-blocks`/`exceptions`/`performance`/`potentialBugs` `active: false` for parity ( `read_encoded` `Pak::read` long); `jvmTarget 21` + fake `java.version=21` during `Detekt` on `Java 25` host (Kotlin `1.9` `JavaVersion.parse("25.0.4.1")` bug).
 - **File header** `// Rust: <crate>/src/<file>.rs:<line> <item>` per top-level item for `rg` parity.
-- **Build** `Kotlin 2.3.0` `FFM` `java.lang.foreign` (`Linker`/`Arena`/`SymbolLookup`/`MemorySegment`) requires `--enable-native-access=ALL-UNNAMED` (`Test` `jvmArgs`).
+- **Build** `Kotlin 2.4.20` `FFM` `java.lang.foreign` (`Linker`/`Arena`/`SymbolLookup`/`MemorySegment`) requires `--enable-native-access=ALL-UNNAMED` (`Test` `jvmArgs`).
 
 ## 11. Examples
 

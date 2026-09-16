@@ -1,3 +1,4 @@
+// Ported from repak (MIT OR Apache-2.0) — Copyright (c) 2024 Truman Kilen, spuds
 // Rust: oodle_loader/src/lib.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "EnumEntryName", "unused", "TooManyFunctions")
 

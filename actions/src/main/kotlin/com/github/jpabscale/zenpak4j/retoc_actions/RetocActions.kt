@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 //@parity:on EXC-014
 // Rust: retoc_cli/src/main.rs — action layer shared by retoc-cli and :zenpak (EXC-014).
 // Moved verbatim from retoc-cli/main.kt (same Rust refs); the Clikt commands stay in retoc-cli.

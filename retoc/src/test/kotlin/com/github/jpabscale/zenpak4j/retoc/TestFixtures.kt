@@ -1,3 +1,4 @@
+// Copyright (c) 2026 jpabscale — original tests (not part of the repak/retoc port)
 // Upstream retoc test fixtures are NOT committed. Every candidate root is either a
 // trumank/retoc repo checkout or an extracted tarball of one; fixtures live at
 // <root>/retoc/tests. Roots tried:

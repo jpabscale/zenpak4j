@@ -1,11 +1,9 @@
 [versions]
-# pinned upstream (track trumank, port starts from jpabscale forks)
+# pinned upstream (tracks trumank; the jpabscale forks are retired — port work lives in zenpak4j)
 repak-upstream-sha = "355b5f62f51959c7cc6dd5a51708646ef483065d"
-repak-fork-sha = "9f8dbd5a3d8a2f76dd4b5d6ae29efaede25bd97f"
 retoc-upstream-sha = "885a8dae740cb1ce1e41ff2e74f67f9f0c118237"
-retoc-fork-sha = "e7c27112ec3ab3ae1e39cb3770d960ee04c456e8"
 
-kotlin = "2.3.0"
+kotlin = "2.4.20"
 gradle-wrapper = "9.7.0"
 detekt = "1.23.8"
 clikt = "5.0.3"

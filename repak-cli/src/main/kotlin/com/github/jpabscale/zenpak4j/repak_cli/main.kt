@@ -1,3 +1,4 @@
+// Ported from repak (MIT OR Apache-2.0) — Copyright (c) 2024 Truman Kilen, spuds
 // Rust: repak_cli/src/main.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "unused", "SpellCheckingInspection", "MagicNumber", "TooManyFunctions", "LongMethod", "ComplexMethod", "EnumEntryName", "VariableNaming")
 

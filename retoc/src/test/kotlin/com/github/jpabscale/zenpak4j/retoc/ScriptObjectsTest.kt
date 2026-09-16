@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: retoc/src/script_objects.rs:215
 package com.github.jpabscale.zenpak4j.retoc
 

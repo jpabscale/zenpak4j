@@ -1,3 +1,4 @@
+// Ported from repak (MIT OR Apache-2.0) — Copyright (c) 2024 Truman Kilen, spuds
 //@parity:on EXC-014
 // Rust: repak_cli/src/main.rs — action layer shared by repak-cli and :zenpak (EXC-014).
 // Moved verbatim from repak-cli/main.kt; the Clikt commands wrap calls in try/catch(handle_error)

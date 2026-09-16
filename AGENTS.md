@@ -146,8 +146,9 @@ Lessons learned while reaching full parity against the rust tools — treat as o
 ## Key paths
 
 - Upstream sources (READ-ONLY references, pinned): sibling checkouts
-  `~/Repositories/repak` (@355b5f6) and `~/Repositories/retoc` (@885a8da); forks tracked at
-  `jpabscale/repak` @9f8dbd5 and `jpabscale/retoc` @e7c2711.
+  `~/Repositories/repak` (@355b5f6) and `~/Repositories/retoc` (@885a8da). The
+  `jpabscale/repak` and `jpabscale/retoc` forks are retired — port work lives in
+  this repo, port-specific behavior is approved in `docs/parity-exceptions.json`.
 - Downloaded fixture trees: `build/fixtures/{repak,retoc}/` (gitignored) — see
   `scripts/download-fixtures.sh`.
 - Shared action layer: `actions/src/main/kotlin/com/github/jpabscale/zenpak4j/{repak_actions,retoc_actions}/`.

@@ -12,11 +12,11 @@ Deploy agents at the leaves of a level in parallel; **before moving up a level, 
 |---|---|---|---|
 | 0 | `repak` `Version`/`VersionMajor`/`Compression`/`MAGIC`/`Key`, `RepakContext`/`RetocContext`, `Error`/`RepakError`, `ext`/`ser` (`ReadExt`/`WriteExt` LE), `crc`, `global` | — | **ported** (`repak/lib.kt`, `repak/error.kt`, `repak/ext.kt`, `retoc/ser.kt`, `retoc/crc.kt`, `retoc/global.kt`) |
 | 1 | `repak` `Footer`/`data`/`entry` (`read_encoded` bitfield `0x3f` + `align16`), `retoc` `name_map` (`CityHash` `lower_utf16`), `file_pool` (`ReentrantLock`/`Condition`), `version` (`EngineVersion` `UE4_25`→`UE5_7`), `compression` (`Zlib`/`Zstd`/`LZ4`/`Oodle` FFM) | L0 | **ported** (`repak/footer.kt`, `repak/data.kt`, `repak/entry.kt`, `retoc/name_map.kt`, `retoc/file_pool.kt`, `retoc/version.kt`, `retoc/compression.kt`) |
-| 2 | `repak` `Pak` (`PHI`/`FDI` `i32::MIN`, `fnv64_path` `UTF16LE`), `oodle_loader` (`Linker`/`Arena` 5 platforms), `retoc` `manifest`/`verse_vm_types`/`script_objects`/`compact_binary` (`Ctx` counting, `varint` LEB) | L1 + `RepakContext`/`RetocContext` | **ported** (`repak/pak.kt` `791` + `oodle_loader/lib.kt` `FFM`, `retoc/manifest.kt`, `retoc/verse_vm_types.kt`, `retoc/script_objects.kt`, `retoc/compact_binary.kt` `22522` entries) |
-| 3 | `retoc` `container_header` (`StoreEntries` `member_offset`/`entry_size` + `SoftPackageReferencesOffset` patch), `lib` `Toc` (`5`-byte `BE` `FIoOffsetAndLength`, `FIoChunkId` `1<<6\|is_new<<7`), `iostore` (`Backend` `sort_container_name`), `logging`, `version_heuristics` (candidate list) | L2 | **ported** (`retoc/container_header.kt` `1111` `5` fixtures `104740` exact, `retoc/lib.kt` `1648` `Toc` `8` tests, `retoc/iostore.kt` `562` `IStore` `3` tests, `retoc/logging.kt`, `retoc/version_heuristics.kt` `322` `heuristic_package_version_from_legacy_package`) |
-| 4 | `retoc` `zen` (`FZenPackageHeader` `1374`, `SeekableByteArray*` `header_size` patch), `legacy_asset` (`FLegacyPackageHeader` `0x9E2A83C1` `1365`), `iostore_writer` (`0x10000` `blake3` `BouncyCastle`), `shader_library` (`Global`/`NuclearNightmare` archive `layout_write`), `asset_registry` (`1195` `8` tests `UE4.22` `43s`) | L3 | **ported** (`retoc/zen.kt` `660` `SPR_UI_Battle`, `retoc/legacy_asset.kt` `754` `5` fixtures, `retoc/iostore_writer.kt` `113` `blake3`, `retoc/shader_library.kt` `756` `6` tests, `retoc/asset_registry.kt` `1128` `HashMap` fast) |
-| 5 | `retoc` `asset_conversion`↔`zen_asset_conversion` (`1515`/`1639` `KeyMutex` outer recursion) | L4 | **ported** (`retoc/asset_conversion.kt` `1644` `Randy`/`BP_Table_Lamp` `2` tests, `retoc/zen_asset_conversion.kt` `800` `10` fixtures `UE5.4`/`5.5`/`5.6`) |
-| 6 | `repak-cli` (`Clikt` 6 commands `info`/`list`/`hash-list`/`unpack`/`pack`/`get` `Channel(0)` rendezvous), `retoc-cli` (`12` subcommands `manifest`/`to-zen`/`to-legacy` etc., `Config` `aes_keys`), `load-logger` (`ProxyDll` `FFM` no-op) + fat jars `repak.jar`/`retoc.jar` | L5 | **ported** (`repak-cli/main.kt` `708` `15M` `repak.jar`, `retoc-cli/main.kt` `963` `24M` `retoc.jar`, `load-logger` `FFM`) |
+| 2 | `repak` `Pak` (`PHI`/`FDI` `i32::MIN`, `fnv64_path` `UTF16LE`), `oodle_loader` (`Linker`/`Arena` 5 platforms), `retoc` `manifest`/`verse_vm_types`/`script_objects`/`compact_binary` (`Ctx` counting, `varint` LEB) | L1 + `RepakContext`/`RetocContext` | **ported** (`repak/pak.kt` + `oodle_loader/lib.kt` `FFM`, `retoc/manifest.kt`, `retoc/verse_vm_types.kt`, `retoc/script_objects.kt`, `retoc/compact_binary.kt` `22522` entries) |
+| 3 | `retoc` `container_header` (`StoreEntries` `member_offset`/`entry_size` + `SoftPackageReferencesOffset` patch), `lib` `Toc` (`5`-byte `BE` `FIoOffsetAndLength`, `FIoChunkId` `1<<6\|is_new<<7`), `iostore` (`Backend` `sort_container_name`), `logging`, `version_heuristics` (candidate list) | L2 | **ported** (`retoc/container_header.kt` `5` fixtures `104740` exact, `retoc/lib.kt` `Toc` `8` tests, `retoc/iostore.kt` `IStore` `3` tests, `retoc/logging.kt`, `retoc/version_heuristics.kt` `heuristic_package_version_from_legacy_package`) |
+| 4 | `retoc` `zen` (`FZenPackageHeader`, `SeekableByteArray*` `header_size` patch), `legacy_asset` (`FLegacyPackageHeader` `0x9E2A83C1`), `iostore_writer` (`0x10000` `blake3` `BouncyCastle`), `shader_library` (`Global`/`NuclearNightmare` archive `layout_write`), `asset_registry` (`8` tests `UE4.22` `43s`) | L3 | **ported** (`retoc/zen.kt` `SPR_UI_Battle`, `retoc/legacy_asset.kt` `5` fixtures, `retoc/iostore_writer.kt` `blake3`, `retoc/shader_library.kt` `6` tests, `retoc/asset_registry.kt` `HashMap` fast) |
+| 5 | `retoc` `asset_conversion`↔`zen_asset_conversion` (`KeyMutex` outer recursion) | L4 | **ported** (`retoc/asset_conversion.kt` `4` tests (`Randy`/`BP_Table_Lamp` + `2` `EXC-015` regressions), `retoc/zen_asset_conversion.kt` `10` fixtures `UE5.4`/`5.5`/`5.6`) |
+| 6 | `repak-cli` (`Clikt` 6 commands `info`/`list`/`hash-list`/`unpack`/`pack`/`get` `Channel(0)` rendezvous), `retoc-cli` (`12` subcommands `manifest`/`to-zen`/`to-legacy` etc., `Config` `aes_keys`), `load-logger` (`ProxyDll` `FFM` no-op) + fat jars `repak.jar`/`retoc.jar` | L5 | **ported** (`repak-cli/main.kt` `15M` `repak.jar`, `retoc-cli/main.kt` `24M` `retoc.jar`, `load-logger` `FFM`) |
 
 ## M1 — repak foundation (done)
 
@@ -69,7 +69,7 @@ Deploy agents at the leaves of a level in parallel; **before moving up a level, 
 | `retoc/retoc/src/script_objects.rs` | `retoc/src/main/kotlin/.../retoc/script_objects.kt` | ported | `2` (`ScriptObjects` `30977`/`23393`) |
 | `retoc/retoc/src/shader_library.rs` | `retoc/src/main/kotlin/.../retoc/shader_library.kt` | ported | `6` (`Global`/`NuclearNightmare`) |
 | `retoc/retoc/src/zen_asset_conversion.rs` | `retoc/src/main/kotlin/.../retoc/zen_asset_conversion.kt` | ported (`EXC-011`) | `10` fixtures `UE5.4`/`5.5`/`5.6` |
-| `retoc/retoc/src/asset_conversion.rs` | `retoc/src/main/kotlin/.../retoc/asset_conversion.kt` | ported | `2` `Randy`/`BP_Table_Lamp` |
+| `retoc/retoc/src/asset_conversion.rs` | `retoc/src/main/kotlin/.../retoc/asset_conversion.kt` | ported (`EXC-015`) | `4` (`Randy`/`BP_Table_Lamp` + `2` `EXC-015` regressions) |
 
 ## M5 — CLIs + fat jars (done)
 
@@ -81,9 +81,9 @@ Deploy agents at the leaves of a level in parallel; **before moving up a level, 
 
 ## Re-generation
 
-- `scripts/pin-check.sh` ← `gradle/libs.versions.toml` `repakUpstreamSha`/`retocUpstreamSha` (`git ls-remote` `trumank/repak`/`retoc` `master`)
-- `scripts/download-fixtures.sh` ← `gradle/libs.versions.toml` `repakUpstreamSha`/`retocUpstreamSha` (`raw.githubusercontent.com` or sibling `../repak`/`../retoc`)
-- `gradle/libs.versions.toml` `repakUpstreamSha`/`retocUpstreamSha` + `gradle.properties` `repak.pinned.sha`/`retoc.pinned.sha` (both must match `README` pins)
+- `scripts/pin-check.sh` ← `gradle/libs.versions.toml` `repak-upstream-sha`/`retoc-upstream-sha` (`git ls-remote` `trumank/repak`/`retoc` `master`)
+- `scripts/download-fixtures.sh` ← `gradle/libs.versions.toml` `repak-upstream-sha`/`retoc-upstream-sha` (`raw.githubusercontent.com` or sibling `../repak`/`../retoc`)
+- `gradle/libs.versions.toml` `repak-upstream-sha`/`retoc-upstream-sha` (must match `README` pins); the `jpabscale/*` forks are retired
 
 ## Tooling
 

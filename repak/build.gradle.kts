@@ -3,7 +3,7 @@ plugins {
 }
 
 dependencies {
-    api("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
+    api("org.jetbrains.kotlin:kotlin-stdlib:2.4.20")
     implementation(project(":oodle-loader"))
     implementation("com.github.luben:zstd-jni:1.5.7-3") // compress only
     implementation("com.qyntrax:unzstd:0.1.0") // pure-JVM decompress (works on win-arm64)

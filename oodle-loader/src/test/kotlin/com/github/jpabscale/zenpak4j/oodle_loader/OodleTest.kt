@@ -1,3 +1,4 @@
+// Copyright (c) 2026 jpabscale — original tests (not part of the repak/retoc port)
 package com.github.jpabscale.zenpak4j.oodle_loader
 
 import org.junit.jupiter.api.Assumptions.assumeTrue

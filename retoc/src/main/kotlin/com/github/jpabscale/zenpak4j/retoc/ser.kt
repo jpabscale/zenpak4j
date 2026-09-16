@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: retoc/src/ser.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "RedundantVisibilityModifier", "TooManyFunctions", "unused")
 

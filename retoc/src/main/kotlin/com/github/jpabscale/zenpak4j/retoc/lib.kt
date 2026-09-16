@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: retoc/src/lib.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "unused", "EnumEntryName", "RedundantVisibilityModifier", "TooManyFunctions", "LongMethod", "ComplexMethod", "MagicNumber", "MemberVisibilityCanBePrivate", "SpellCheckingInspection")
 

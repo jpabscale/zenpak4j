@@ -6,7 +6,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "2.3.0" apply false
+    id("org.jetbrains.kotlin.jvm") version "2.4.20" apply false
     id("io.gitlab.arturbosch.detekt") version "1.23.8" apply false
 }
 
@@ -29,7 +29,7 @@ subprojects {
         mavenCentral()
     }
 
-    // Use Java 25 toolchain for FFM (java.lang.foreign); Kotlin 2.3.0 supports Java 25
+    // Use Java 25 toolchain for FFM (java.lang.foreign); Kotlin 2.4.20 supports Java 25
     extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
         jvmToolchain(25)
     }

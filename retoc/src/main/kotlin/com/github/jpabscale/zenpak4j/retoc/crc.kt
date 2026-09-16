@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 // Rust: retoc/src/crc.rs:1
 @file:Suppress("FunctionName", "PropertyName", "ClassName", "unused", "SpellCheckingInspection")
 @file:OptIn(ExperimentalUnsignedTypes::class)

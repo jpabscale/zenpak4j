@@ -1,3 +1,4 @@
+// Copyright (c) 2026 jpabscale — original tests (not part of the repak/retoc port)
 package com.github.jpabscale.zenpak4j
 
 import com.github.jpabscale.zenpak4j.repak.Compression

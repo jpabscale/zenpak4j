@@ -1,3 +1,4 @@
+// Ported from retoc (MIT) — Copyright (c) 2025 Truman Kilen and Archengius
 package com.github.jpabscale.zenpak4j.retoc
 
 import org.junit.jupiter.api.Test
@@ -236,6 +237,162 @@ class AssetConversionTest {
         treeCheck[generatedLegacyHeader.summary.package_name] = generatedLegacyHeader.imports.size
         val bb = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(treeCheck.size).array()
         assertEquals(treeCheck.size, ByteBuffer.wrap(bb).order(ByteOrder.LITTLE_ENDIAN).int)
+    }
+
+    // EXC-015: an unloadable imported package must not veto resolution of
+    // later packages in resolve_package_import_internal_legacy. A mesh-style
+    // caller lists a missing package FIRST and a present package SECOND; the
+    // present package's export must still resolve, while a genuinely missing
+    // target must still throw (EXC-011 sentinel path preserved).
+    @Test
+    fun test_legacy_resolve_skips_unloadable_package() {
+        val engineVersion = EngineVersion.UE5_4
+        val containerVersion = engineVersion.toc_version()
+        val headerVersion = engineVersion.container_header_version()
+        val packageVersion = engineVersion.package_file_version()
+
+        val smPackageName = "/Game/Billiards/Static_meshes/SM_table_lamp"
+        val smPackageId = FPackageId.from_name(smPackageName)
+        val smHeader = createDummySmTableLampHeader(packageVersion, headerVersion)
+        val smImport = smHeader.export_map[0].legacy_global_import_index()
+
+        val scriptObjectsBytes = Files.readAllBytes(TestFixtures.find("UE5.3/ScriptObjects.bin")!!)
+        val scriptObjects = ZenScriptObjects.deserialize_new(java.io.ByteArrayInputStream(scriptObjectsBytes))
+
+        val smStoreEntry = StoreEntry(
+            imported_packages = emptyList(),
+            shader_map_hashes = emptyList(),
+            export_count = smHeader.export_map.size,
+            export_bundle_count = 0
+        )
+        val mockedHeaders = HashMap<FPackageId, FZenPackageHeader>()
+        mockedHeaders[smPackageId] = smHeader
+        val mockedStoreEntries = HashMap<FPackageId, StoreEntry>()
+        mockedStoreEntries[smPackageId] = smStoreEntry
+        val fakeStore = FakeIoStore(
+            packageBytes = HashMap(),
+            scriptObjects = scriptObjects,
+            containerVersion = containerVersion,
+            headerVersion = headerVersion,
+            mockedHeaders = mockedHeaders,
+            mockedStoreEntries = mockedStoreEntries
+        )
+        val log = Log.no_log()
+        val packageContext = FZenPackageContext.create(fakeStore, packageVersion, log, null)
+
+        fun callerHeader(vararg ids: FPackageId): FZenPackageHeader {
+            val nameMap = FNameMap.create(EMappedNameType.Package)
+            val nm = nameMap.store("/Game/Caller/M")
+            val header = FZenPackageHeader(container_header_version = headerVersion)
+            header.name_map = nameMap
+            header.summary = FZenPackageSummary()
+            header.summary.name = nm
+            header.imported_packages = ids.toMutableList()
+            return header
+        }
+
+        val goneId = FPackageId(0xBADF00D5EEDUL)
+        // missing package listed FIRST: must not veto the present one
+        val resolved = resolve_package_import_internal_legacy(
+            packageContext, callerHeader(goneId, smPackageId), smImport)
+        assertEquals("SM_table_lamp", resolved.object_name)
+        assertEquals("StaticMesh", resolved.class_name)
+        // present-first order keeps working too
+        val resolved2 = resolve_package_import_internal_legacy(
+            packageContext, callerHeader(smPackageId, goneId), smImport)
+        assertEquals("SM_table_lamp", resolved2.object_name)
+        // genuinely missing target still throws (placeholder path intact)
+        val missing = FPackageObjectIndex.create(FPackageObjectIndexType.PackageImport, 0x12345678UL)
+        assertThrows(IllegalArgumentException::class.java) {
+            resolve_package_import_internal_legacy(packageContext, callerHeader(goneId), missing)
+        }
+    }
+
+    // EXC-015: a mixed-version source container (Initial-era caller header in
+    // the legacy resolver scheme) that lists an unloadable package ahead of a
+    // newer, present one must still convert into the same import table as the
+    // baseline container without the unloadable entry — and the data-embedded
+    // ref lookup must agree with that table entry.
+    @Test
+    fun test_legacy_mixed_container_refs_agree() {
+        val engineVersion = EngineVersion.UE5_4
+        val containerVersion = engineVersion.toc_version()
+        val headerVersion = engineVersion.container_header_version()
+        val packageVersion = engineVersion.package_file_version()
+
+        val smPackageName = "/Game/Billiards/Static_meshes/SM_table_lamp"
+        val smPackageId = FPackageId.from_name(smPackageName)
+        val smHeader = createDummySmTableLampHeader(packageVersion, headerVersion)
+        // Legacy containers store the object's global import index (a
+        // PackageImport-kind index) in the export's hash field.
+        val smImport = FPackageObjectIndex.create_legacy_package_import_from_path("$smPackageName.SM_table_lamp")
+        smHeader.export_map[0].public_export_hash = smImport.type_and_id
+
+        val scriptObjectsBytes = Files.readAllBytes(TestFixtures.find("UE5.3/ScriptObjects.bin")!!)
+        val scriptObjects = ZenScriptObjects.deserialize_new(java.io.ByteArrayInputStream(scriptObjectsBytes))
+        val smStoreEntry = StoreEntry(
+            imported_packages = emptyList(),
+            shader_map_hashes = emptyList(),
+            export_count = smHeader.export_map.size,
+            export_bundle_count = 0
+        )
+
+        fun context(): FZenPackageContext {
+            val mockedHeaders = HashMap<FPackageId, FZenPackageHeader>()
+            mockedHeaders[smPackageId] = smHeader
+            val mockedStoreEntries = HashMap<FPackageId, StoreEntry>()
+            mockedStoreEntries[smPackageId] = smStoreEntry
+            val fakeStore = FakeIoStore(
+                packageBytes = HashMap(),
+                scriptObjects = scriptObjects,
+                containerVersion = containerVersion,
+                headerVersion = headerVersion,
+                mockedHeaders = mockedHeaders,
+                mockedStoreEntries = mockedStoreEntries
+            )
+            return FZenPackageContext.create(fakeStore, packageVersion, Log.no_log(), null)
+        }
+
+        fun caller(vararg ids: FPackageId): FZenPackageHeader {
+            val nameMap = FNameMap.create(EMappedNameType.Package)
+            val nm = nameMap.store("/Game/Caller/M")
+            val header = FZenPackageHeader(
+                container_header_version = EIoContainerHeaderVersion.Initial,
+                name_map = nameMap
+            )
+            header.summary = FZenPackageSummary()
+            header.summary.name = nm
+            header.imported_packages = ids.toMutableList()
+            header.import_map = mutableListOf(smImport)
+            return header
+        }
+
+        fun refs(builder: LegacyAssetBuilder): List<String> = builder.legacy_package.imports.map {
+            val classPackage = builder.legacy_package.name_map.get(it.class_package)
+            val className = builder.legacy_package.name_map.get(it.class_name)
+            val objectName = builder.legacy_package.name_map.get(it.object_name)
+            "$classPackage|$className|$objectName"
+        }
+
+        // baseline: only the present package is listed
+        val baselineBuilder = LegacyAssetBuilder(context(), FPackageId.from_name("/Game/Caller/M"), caller(smPackageId))
+        build_import_map(baselineBuilder)
+
+        // mixed: an unloadable package is listed FIRST
+        val goneId = FPackageId(0xBADF00D5EEDUL)
+        val mixedBuilder = LegacyAssetBuilder(context(), FPackageId.from_name("/Game/Caller/M"), caller(goneId, smPackageId))
+        build_import_map(mixedBuilder)
+
+        assertFalse(mixedBuilder.has_failed_import_map_entries)
+        assertEquals(refs(baselineBuilder), refs(mixedBuilder), "converted refs must agree with the source container")
+        assertTrue(refs(mixedBuilder).none { it.contains("/Engine/UnknownPackage") })
+        assertTrue(refs(mixedBuilder).any { it.contains("SM_table_lamp") })
+
+        // the data-embedded ref path resolves to the same table entry
+        val tableIndex = mixedBuilder.original_import_order[0]!!
+        val dataIndex = resolve_local_package_object(mixedBuilder, smImport)
+        assertTrue(dataIndex.is_import())
+        assertEquals(tableIndex, dataIndex.to_import_index().toInt())
     }
 
     // Helper to create dummy SM_table_lamp header
