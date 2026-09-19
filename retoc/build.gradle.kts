@@ -9,6 +9,7 @@ tasks.withType<Test> {
 }
 
 dependencies {
+    api("com.fasterxml.jackson.core:jackson-databind:2.22.2")  // approved: Zen JSON node API
     api(project(":repak"))
     api(project(":oodle-loader"))
     api("org.jetbrains.kotlin:kotlin-stdlib:2.4.20")

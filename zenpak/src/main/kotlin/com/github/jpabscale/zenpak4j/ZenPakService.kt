@@ -28,14 +28,24 @@ import com.github.jpabscale.zenpak4j.retoc.FGuid
 import com.github.jpabscale.zenpak4j.retoc.UEPath
 import com.github.jpabscale.zenpak4j.retoc.UEPathBuf
 import com.github.jpabscale.zenpak4j.retoc.set_global_game_id
+import com.github.jpabscale.zenpak4j.retoc.EIoChunkType
+import com.github.jpabscale.zenpak4j.retoc.FIoChunkIdRaw
+import com.github.jpabscale.zenpak4j.retoc.open
+import com.github.jpabscale.zenpak4j.retoc_actions.ActionGet
+import com.github.jpabscale.zenpak4j.retoc_actions.ActionPackRaw
 import com.github.jpabscale.zenpak4j.retoc_actions.ActionToLegacy
 import com.github.jpabscale.zenpak4j.retoc_actions.ActionToZen
 import com.github.jpabscale.zenpak4j.retoc_actions.ActionUnpack as RetocActionUnpack
+import com.github.jpabscale.zenpak4j.retoc_actions.ActionUnpackRaw
+import com.github.jpabscale.zenpak4j.retoc_actions.action_get
+import com.github.jpabscale.zenpak4j.retoc_actions.action_pack_raw
 import com.github.jpabscale.zenpak4j.retoc_actions.action_to_legacy
 import com.github.jpabscale.zenpak4j.retoc_actions.action_to_legacy_inner
 import com.github.jpabscale.zenpak4j.retoc_actions.action_to_zen
 import com.github.jpabscale.zenpak4j.retoc_actions.action_to_zen_reader
 import com.github.jpabscale.zenpak4j.retoc_actions.action_unpack
+import com.github.jpabscale.zenpak4j.retoc_actions.action_unpack_raw
+import java.util.HexFormat
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.nio.channels.FileChannel
@@ -49,7 +59,7 @@ import java.nio.file.StandardOpenOption
  * implementations and is safe to call concurrently from multiple GenerateMod threads.
  *
  * Motivation: avoid per-asset subprocess round-trips (fork + IPC + temp-dir) — same win as
- * uasset4j's in-JVM pipeline (52s vs 2:38 on StellarBlade .demo.sb).
+ * uasset4j's in-JVM pipeline, without shelling out to the bundled tools.
  */
 object ZenPakService {
 
@@ -69,6 +79,7 @@ object ZenPakService {
      * Delegates to repak_actions.pack (deterministic sorted write, EXC-004). quiet=true suppresses
      * the CLI's completion message.
      */
+    @JvmName("repak_pack")
     fun repak_pack(
         inputDir: Path,
         outputPak: Path,
@@ -356,6 +367,261 @@ object ZenPakService {
     }
 
     /**
+     * retoc unpack-raw: extract every chunk of [input] (a .utoc) verbatim to
+     * [outputDir]/chunks/<chunk-id-hex> plus [outputDir]/manifest.json — the exact input
+     * shape [retoc_pack_raw] consumes. Chunk bytes are written as stored (no legacy conversion).
+     */
+    fun retoc_unpack_raw(
+        input: Path,
+        outputDir: Path,
+        aes_key: String? = null,
+        game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
+    ) {
+        set_global_game_id(game_id)
+        val config = Config().apply {
+            if (!aes_key.isNullOrBlank()) {
+                aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
+            }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
+        }
+        action_unpack_raw(ActionUnpackRaw(utoc = input, output = outputDir), config)
+    }
+
+    /**
+     * Zen-JSON dump of a cooked package chunk: the container AST (summary, name map, import map,
+     * export map, bundle/dependency tables, arcs, cell maps) plus a payload size/sha256 inventory
+     * (bytes only when [includePayloads]). Deterministic; no legacy UAssetAPI data is embedded.
+     */
+    fun zen_package_to_json(chunk: Path, includePayloads: Boolean = false): String =
+        com.github.jpabscale.zenpak4j.retoc.zen_package_to_json(
+            java.nio.file.Files.readAllBytes(chunk), includePayloads)
+
+    /**
+     * Zen-JSON tables dump of the package at [pathSuffix] inside [container] (a .utoc or a dir):
+     * locates the package chunk, extracts it, resolves the store entry from the container header
+     * (Initial packages require it) and dumps. Returns the JSON text.
+     */
+    fun retoc_package_tables(
+        container: Path,
+        pathSuffix: String,
+        includePayloads: Boolean = false,
+        aes_key: String? = null,
+        game_id: String? = null,
+    ): String {
+        val info = retoc_locate_package_chunk(container, pathSuffix, aes_key, game_id)
+            ?: throw IllegalStateException("no package chunk matches '$pathSuffix' in $container")
+        val tmp = java.nio.file.Files.createTempDirectory("zen-tables")
+        try {
+            val chunk = tmp.resolve("chunk.bin")
+            retoc_get(container, info.chunkIdHex, chunk, aes_key, game_id)
+            val headerDir = tmp.resolve("header")
+            java.nio.file.Files.createDirectories(headerDir)
+            retoc_extract_container_header(container, headerDir, aes_key, game_id)
+            val headerFile = java.nio.file.Files.list(headerDir).use { s -> s.findFirst().orElse(null) }
+                ?: throw IllegalStateException("no container header extracted from $container")
+            val entry = com.github.jpabscale.zenpak4j.retoc.store_entry_of_container_header(
+                java.nio.file.Files.readAllBytes(headerFile),
+                com.github.jpabscale.zenpak4j.retoc.package_id_of_chunk_id(info.chunkIdHex))
+            return com.github.jpabscale.zenpak4j.retoc.zen_package_to_json(
+                java.nio.file.Files.readAllBytes(chunk), includePayloads,
+                com.github.jpabscale.zenpak4j.retoc.EIoContainerHeaderVersion.Initial,
+                com.github.jpabscale.zenpak4j.retoc.EIoStoreTocVersion.PartitionSize, entry)
+        } finally {
+            tmp.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Apply a Zen table patch (see `zen_package_apply_patch`) to the package at [pathSuffix] in
+     * [container] and return the rewritten chunk bytes; refuses a patch whose result does not pass
+     * `zen_package_validate`. Payload bytes are carried through untouched.
+     */
+    fun retoc_package_apply_tables(
+        container: Path,
+        pathSuffix: String,
+        patchText: String,
+        aes_key: String? = null,
+        game_id: String? = null,
+    ): ByteArray {
+        val info = retoc_locate_package_chunk(container, pathSuffix, aes_key, game_id)
+            ?: throw IllegalStateException("no package chunk matches '$pathSuffix' in $container")
+        val tmp = java.nio.file.Files.createTempDirectory("zen-tables-apply")
+        try {
+            val chunk = tmp.resolve("chunk.bin")
+            retoc_get(container, info.chunkIdHex, chunk, aes_key, game_id)
+            val headerDir = tmp.resolve("header")
+            java.nio.file.Files.createDirectories(headerDir)
+            retoc_extract_container_header(container, headerDir, aes_key, game_id)
+            val headerFile = java.nio.file.Files.list(headerDir).use { s -> s.findFirst().orElse(null) }
+                ?: throw IllegalStateException("no container header extracted from $container")
+            val entry = com.github.jpabscale.zenpak4j.retoc.store_entry_of_container_header(
+                java.nio.file.Files.readAllBytes(headerFile),
+                com.github.jpabscale.zenpak4j.retoc.package_id_of_chunk_id(info.chunkIdHex))
+            val node = com.github.jpabscale.zenpak4j.retoc.zen_package_to_json_node(
+                java.nio.file.Files.readAllBytes(chunk), true,
+                com.github.jpabscale.zenpak4j.retoc.EIoContainerHeaderVersion.Initial,
+                com.github.jpabscale.zenpak4j.retoc.EIoStoreTocVersion.PartitionSize, entry)
+            val applied = com.github.jpabscale.zenpak4j.retoc.zen_package_apply_patch(
+                node, com.fasterxml.jackson.databind.ObjectMapper().readTree(patchText))
+            val bytes = com.github.jpabscale.zenpak4j.retoc.zen_package_from_json_node(node, entry)
+            val findings = com.github.jpabscale.zenpak4j.retoc.zen_package_validate(bytes)
+            if (findings.isNotEmpty()) {
+                throw IllegalStateException("patched chunk fails validation: $findings")
+            }
+            println("Applied $applied Zen table edit(s)")
+            return bytes
+        } finally {
+            tmp.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * Payload-preserving repack of one cooked package chunk: swap the export payloads that differ
+     * between [originalChunk] (the game's own cooked chunk) and [donorChunk] (a to-zen conversion of
+     * the patched asset) - or exactly [changedExports] when given - into the cooker's chunk, and
+     * write [outputChunk] plus a [outputHeaderChunk] copy of the container header carrying the
+     * updated store entry (the packer copies entries verbatim). Returns the swapped export indices.
+     */
+    fun retoc_graft_package_chunk(
+        originalChunk: Path,
+        donorChunk: Path,
+        headerChunk: Path,
+        packageId: ULong,
+        outputChunk: Path,
+        outputHeaderChunk: Path,
+        changedExports: Set<Int>? = null,
+    ): Set<Int> {
+        val original = java.nio.file.Files.readAllBytes(originalChunk)
+        val donor = java.nio.file.Files.readAllBytes(donorChunk)
+        val headerBytes = java.nio.file.Files.readAllBytes(headerChunk)
+        val originalPayloads = com.github.jpabscale.zenpak4j.retoc.extract_zen_payloads(original)
+        val donorPayloads = com.github.jpabscale.zenpak4j.retoc.extract_zen_payloads(donor)
+        require(originalPayloads.size == donorPayloads.size) {
+            "donor export count ${donorPayloads.size} != original ${originalPayloads.size}"
+        }
+        val changed = changedExports ?: originalPayloads.indices.filterNot {
+            originalPayloads[it].contentEquals(donorPayloads[it])
+        }.toSet()
+        val storeEntry = com.github.jpabscale.zenpak4j.retoc.FIoContainerHeader
+            .deserialize(java.io.ByteArrayInputStream(headerBytes), null)
+            .get_store_entry(com.github.jpabscale.zenpak4j.retoc.FPackageId(packageId))
+            ?: throw IllegalStateException("no store entry for package $packageId in $headerChunk")
+        val grafted = com.github.jpabscale.zenpak4j.retoc.graft_zen_chunk(
+            original, changed.associateWith { donorPayloads[it] }, storeEntry)
+        outputChunk.parent?.let { java.nio.file.Files.createDirectories(it) }
+        java.nio.file.Files.write(outputChunk, grafted.chunk)
+        val patchedHeader = com.github.jpabscale.zenpak4j.retoc.patch_container_header_store_entry(
+            headerBytes, com.github.jpabscale.zenpak4j.retoc.FPackageId(packageId), grafted.store_entry)
+        outputHeaderChunk.parent?.let { java.nio.file.Files.createDirectories(it) }
+        java.nio.file.Files.write(outputHeaderChunk, patchedHeader)
+        return changed
+    }
+
+    /**
+     * retoc pack-raw: pack [inputDir] (chunks/ + manifest.json) into [outputUtoc]. ExportBundleData
+     * chunks get their FPackageStoreEntry from a ContainerHeader chunk in the input when present,
+     * so an extracted-then-patched game chunk keeps the cooker's store entry.
+     */
+    fun retoc_pack_raw(inputDir: Path, outputUtoc: Path, game_id: String? = null) {
+        set_global_game_id(game_id)
+        action_pack_raw(ActionPackRaw(input = inputDir, utoc = outputUtoc), Config())
+    }
+
+    /** retoc get: write the raw chunk [chunkIdHex] of [input] to [output] (stdout when null or "-"). */
+    fun retoc_get(
+        input: Path,
+        chunkIdHex: String,
+        output: Path? = null,
+        aes_key: String? = null,
+        game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
+    ) {
+        set_global_game_id(game_id)
+        val config = Config().apply {
+            if (!aes_key.isNullOrBlank()) {
+                aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
+            }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
+        }
+        action_get(
+            ActionGet(input = input, chunk_id = FIoChunkIdRaw.from_string(chunkIdHex), output = output),
+            config
+        )
+    }
+
+    /**
+     * Locate the package chunk whose stored path ends with [pathSuffix] inside [input] and return
+     * its id/size plus the container's TOC/mount/header info — the fields a pack-raw manifest needs.
+     * Null when the container does not hold that path.
+     */
+    fun retoc_locate_package_chunk(
+        input: Path,
+        pathSuffix: String,
+        aes_key: String? = null,
+        game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
+    ): RetocPackageChunkInfo? {
+        set_global_game_id(game_id)
+        val config = Config().apply {
+            if (!aes_key.isNullOrBlank()) {
+                aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
+            }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
+        }
+        val iostore = open(input, config)
+        val chunk = iostore.chunks().firstOrNull { it.path()?.endsWith(pathSuffix) == true }
+            ?: return null
+        return RetocPackageChunkInfo(
+            chunkIdHex = HexFormat.of().formatHex(chunk.id().get_raw().id),
+            chunkSize = chunk.size().toLong(),
+            tocVersion = iostore.container_file_version() ?: EIoStoreTocVersion.Initial,
+            mountPoint = iostore.mount_point(),
+            containerHeaderVersion = iostore.container_header_version()
+        )
+    }
+
+    /**
+     * Write [input]'s ContainerHeader chunk verbatim to [outputDir]/<chunk-id-hex> and return the
+     * chunk id hex. Pairs with [retoc_pack_raw]: the header carries every FPackageStoreEntry of the
+     * container, so a patched chunk extracted from it keeps the original store entry (imported
+     * packages, export/bundle counts) instead of a re-derived one.
+     */
+    fun retoc_extract_container_header(
+        input: Path,
+        outputDir: Path,
+        aes_key: String? = null,
+        game_id: String? = null,
+        override_toc_version: EIoStoreTocVersion? = null,
+        override_container_header_version: EIoContainerHeaderVersion? = null,
+    ): String {
+        set_global_game_id(game_id)
+        val config = Config().apply {
+            if (!aes_key.isNullOrBlank()) {
+                aes_keys[FGuid()] = RetocAesKey.from_str(aes_key)
+            }
+            override_toc_version?.let { toc_version_override = it }
+            override_container_header_version?.let { container_header_version_override = it }
+        }
+        val iostore = open(input, config)
+        val header = iostore.chunks().firstOrNull { it.id().get_chunk_type() == EIoChunkType.ContainerHeader }
+            ?: throw IllegalStateException("no ContainerHeader chunk in $input")
+        val chunkIdHex = HexFormat.of().formatHex(header.id().get_raw().id)
+        Files.createDirectories(outputDir)
+        Files.write(
+            outputDir.resolve(chunkIdHex), header.read(),
+            StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING
+        )
+        return chunkIdHex
+    }
+
+    /**
      * retoc to-legacy into memory: run the exact action_to_legacy_inner pipeline over
      * [inputFiles], delivering every produced file through [on_file] (path, allow_compress,
      * bytes) instead of writing to disk. Shaders stay disabled, like [retoc_to_legacy].
@@ -481,3 +747,16 @@ object ZenPakService {
         return normPrefix.relativize(normPath)
     }
 }
+
+/**
+ * A package chunk located inside a game container ([retoc_locate_package_chunk]) — the id/size
+ * plus the container's TOC version, mount point and container-header version, i.e. exactly the
+ * fields a pack-raw manifest needs to re-pack the chunk under its original id.
+ */
+data class RetocPackageChunkInfo(
+    val chunkIdHex: String,
+    val chunkSize: Long,
+    val tocVersion: EIoStoreTocVersion,
+    val mountPoint: String,
+    val containerHeaderVersion: EIoContainerHeaderVersion?
+)
