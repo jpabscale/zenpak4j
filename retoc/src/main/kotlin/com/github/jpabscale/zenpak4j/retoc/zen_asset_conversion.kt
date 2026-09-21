@@ -287,7 +287,12 @@ fun setup_zen_package_summary(builder: ZenPackageBuilder): Unit {
     // TreeMap verification per spec
     val treeCheck = TreeMap<String, Int>()
     for ((idx, n) in slice.withIndex()) treeCheck[n] = idx
-    check(treeCheck.size == slice.size)
+    check(treeCheck.size == slice.size) {
+        val dupes = slice.size - treeCheck.size
+        "Name map has $dupes duplicate entry/entries in first $name_map_size names " +
+            "(slice size=${slice.size}, unique=${treeCheck.size}). " +
+            "This usually means a NameMap was patched with the same name added more than once."
+    }
     builder.zen_package.name_map = FNameMap.create_from_names(EMappedNameType.Package, slice)
     // Make sure not to attempt to put uncooked packages into zen
     if (builder.legacy_package.summary.versioning_info.package_file_version.is_ue5()) {
@@ -1314,7 +1319,11 @@ fun build_serialize_zen_asset(
             // TreeMap verification for imports
             val treeImp = TreeMap<FPackageId, UInt>()
             for ((k,v) in builder.package_import_lookup) treeImp[k]=v
-            check(treeImp.size == builder.package_import_lookup.size)
+            check(treeImp.size == builder.package_import_lookup.size) {
+                val dupes = builder.package_import_lookup.size - treeImp.size
+                "Package import lookup has $dupes duplicate entry/entries " +
+                    "(total=${builder.package_import_lookup.size}, unique=${treeImp.size})"
+            }
             Triple(builder.package_id, store_entry, package_data)
         }
         deferred.await()

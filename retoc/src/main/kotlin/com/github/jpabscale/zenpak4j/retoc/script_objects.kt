@@ -386,7 +386,7 @@ class FPackageObjectIndex(
             val bb = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(raw.toLong())
             bb.flip()
             val checked = bb.getLong().toULong()
-            check(checked == raw)
+            check(checked == raw) { "FPackageObjectIndex ByteBuffer LE round-trip failed: read ${raw.toString(16)} but re-encoded to ${checked.toString(16)}" }
             return FPackageObjectIndex(checked)
         }
     }
