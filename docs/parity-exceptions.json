@@ -180,6 +180,18 @@
     "approved_on": "2026-09-14",
     "reason": "Pinned retoc@885a8da and the retired jpabscale/retoc fork (retoc@e7c2711) to-legacy can emit export-data object references that disagree with the rebuilt legacy import map: values point at placeholder imports (or stale indices) while the table carries the real entries (observed: skeletal-mesh material slots, physics-asset and anim-blueprint refs in a mixed-version mod container). Neither codebase remaps values to the resolved table entries. Kotlin diverges intentionally: data-embedded refs resolve through the same lookup that builds the table, so table and data always agree with zen truth. Genuinely unresolvable refs keep the upstream placeholder behavior (EXC-011 sentinel path unchanged); only mislinked-to-existing-target refs are repaired. Regression: synthetic mixed-version fixture asserting ref-set equality between source container and converted output. Wrapped in //@parity:on EXC-015 / //@parity:off EXC-015 around the changed regions.",
     "status": "active"
+  },
+  {
+    "id": "EXC-016",
+    "tool": "both",
+    "scope": {
+      "kind": "behavior",
+      "target": "stdout/stderr-writing actions are Console receiver extensions with printable stream injection (default System.out/System.err)"
+    },
+    "approved_by": "jpabscale",
+    "approved_on": "2026-09-22",
+    "reason": "Rust repak_cli/retoc_cli actions print with println!/print! to the process stdout and construct Log::new_stdout; retoc also writes CLI-visible diagnostics to stderr (Log Error+ lines in StdoutLogBackend, the iostore.rs ContainerHeader parse-failure eprintln!, and the fork's composite-container warnings). For in-process JVM reuse the port must let an embedder bind both streams without a process-global System.setOut/System.setErr capture (unbounded capture window, unrelated threads included, one captured call per JVM) and without rewriting the Rust println!/eprintln! statements (which are CLI-visible output, not logging; routing them through Log would change formatting and make them suppressible by level). Kotlin therefore writes stdout-emitting functions as extension functions on a JVM-host Console(out: PrintStream = System.out, err: PrintStream = System.err) whose println member is the translation target of the Rust macros (script_objects.rs's print member becomes a Console extension over the same receiver; Console declares no print(msg) member by design so the extension is not shadowed); the Rust-shaped top-level function remains as a one-line delegating wrapper so CLI call sites and stdout bytes are unchanged, and Log::new_stdout(...) becomes console.new_log(...) (same levels and line format via PrintStreamLogBackend(out, err)). Stderr writes take the stream explicitly: the iostore open functions (open/open_with_container_paths/IoStoreBackend.open/open_paths/IoStoreContainer.open) and the ZenPakService entry points gain an err parameter (default System.err), and Log Error+ lines follow the same StdoutLogBackend split. Only declaration form and call sites diverge; every Rust statement stays in place and in order, the ported statement text is byte-identical (unqualified println resolves to the Console member; the pinned sources contain no bare print! call site), wire format is untouched, and the default Console() reproduces the pinned CLI stdout and stderr byte-for-byte (verified by manual before/after captures of the pinned CLI stdout and stderr). Markers //@parity:on EXC-016 / //@parity:off EXC-016 wrap the Console and PrintStreamLogBackend definitions; the individual receiver declarations and err parameters are unwrapped, mirroring EXC-001.",
+    "status": "active"
   }
  ]
 }

@@ -42,7 +42,7 @@ Deploy agents at the leaves of a level in parallel; **before moving up a level, 
 | `retoc/retoc/src/name_map.rs` | `retoc/src/main/kotlin/.../retoc/name_map.kt` | ported (`EXC-008`) | `CityHash` `FNameMap` |
 | `retoc/retoc/src/file_pool.rs` | `retoc/src/main/kotlin/.../retoc/file_pool.kt` | ported | `FilePool` `ReentrantLock` |
 | `retoc/retoc/src/global.rs` | `retoc/src/main/kotlin/.../retoc/global.kt` | ported (`EXC-001`, `EXC-007`) | `RetocContext` |
-| `retoc/retoc/src/logging.rs` | `retoc/src/main/kotlin/.../retoc/logging.kt` | ported | `Log` `Stdout`/`Noop` |
+| `retoc/retoc/src/logging.rs` | `retoc/src/main/kotlin/.../retoc/logging.kt` | ported (`EXC-016`) | `Log` `Stdout`/`Noop`/`PrintStream` |
 | `retoc/retoc/src/version.rs` | `retoc/src/main/kotlin/.../retoc/version.kt` | ported | `EngineVersion` `UE4_25`→`UE5_7` |
 | `retoc/retoc/src/compression.rs` | `retoc/src/main/kotlin/.../retoc/compression.kt` | ported | `Zlib`/`Zstd`/`LZ4`/`Oodle` |
 | `retoc/retoc/src/manifest.rs` | `retoc/src/main/kotlin/.../retoc/manifest.kt` | ported | `PackageStoreManifest` |
@@ -54,7 +54,7 @@ Deploy agents at the leaves of a level in parallel; **before moving up a level, 
 |---|---|---|---|
 | `retoc/retoc/src/container_header.rs` | `retoc/src/main/kotlin/.../retoc/container_header.kt` | ported (`EXC-007`) | `5` fixtures `104740` exact (`StoreEntries` `16 B` fix) |
 | `retoc/retoc/src/lib.rs` (Toc) | `retoc/src/main/kotlin/.../retoc/lib.kt` | ported | `Toc` `8` (`package_id`, `directory_index` `BFS`, `TocTest` `Encrypted`/`Multiblock`) |
-| `retoc/retoc/src/iostore.rs` | `retoc/src/main/kotlin/.../retoc/iostore.kt` | ported (`EXC-009`) | `IStore` `3` (`sort_container`) |
+| `retoc/retoc/src/iostore.rs` | `retoc/src/main/kotlin/.../retoc/iostore.kt` | ported (`EXC-009`, `EXC-016`) | `IStore` `3` (`sort_container`) |
 | `retoc/retoc/src/iostore_writer.rs` | `retoc/src/main/kotlin/.../retoc/iostore_writer.kt` | ported (`EXC-010`) | `0x10000` `blake3` `finalize` |
 | `retoc/retoc/src/version_heuristics.rs` | `retoc/src/main/kotlin/.../retoc/version_heuristics.kt` | ported | `heuristic_package_version_from_legacy_package` candidate list |
 
@@ -66,7 +66,7 @@ Deploy agents at the leaves of a level in parallel; **before moving up a level, 
 | `retoc/retoc/src/legacy_asset.rs` | `retoc/src/main/kotlin/.../retoc/legacy_asset.kt` | ported | `5` fixtures |
 | `retoc/retoc/src/asset_registry.rs` | `retoc/src/main/kotlin/.../retoc/asset_registry.kt` | ported | `8` (`UE4.22` `43s` `149k` names) |
 | `retoc/retoc/src/compact_binary.rs` | `retoc/src/main/kotlin/.../retoc/compact_binary.kt` | ported | `22522` `packagestore.manifest` |
-| `retoc/retoc/src/script_objects.rs` | `retoc/src/main/kotlin/.../retoc/script_objects.kt` | ported | `2` (`ScriptObjects` `30977`/`23393`) |
+| `retoc/retoc/src/script_objects.rs` | `retoc/src/main/kotlin/.../retoc/script_objects.kt` | ported (`EXC-016`) | `2` (`ScriptObjects` `30977`/`23393`) |
 | `retoc/retoc/src/shader_library.rs` | `retoc/src/main/kotlin/.../retoc/shader_library.kt` | ported | `6` (`Global`/`NuclearNightmare`) |
 | `retoc/retoc/src/zen_asset_conversion.rs` | `retoc/src/main/kotlin/.../retoc/zen_asset_conversion.kt` | ported (`EXC-011`) | `10` fixtures `UE5.4`/`5.5`/`5.6` |
 | `retoc/retoc/src/asset_conversion.rs` | `retoc/src/main/kotlin/.../retoc/asset_conversion.kt` | ported (`EXC-015`) | `4` (`Randy`/`BP_Table_Lamp` + `2` `EXC-015` regressions) |
@@ -75,8 +75,8 @@ Deploy agents at the leaves of a level in parallel; **before moving up a level, 
 
 | Rust file | Kotlin file | Status | Tests |
 |---|---|---|---|
-| `repak/repak_cli/src/main.rs` | `actions/src/main/kotlin/com/github/jpabscale/zenpak4j/repak_actions/RepakActions.kt` | ported (`EXC-005`, `EXC-006`, `EXC-014`) | action layer in `:actions` (shared with `:zenpak`); Clikt surface in `repak-cli/main.kt` |
-| `retoc/retoc_cli/src/main.rs` | `actions/src/main/kotlin/com/github/jpabscale/zenpak4j/retoc_actions/RetocActions.kt` | ported (`EXC-011`, `EXC-012`, `EXC-014`) | action layer in `:actions` (shared with `:zenpak`); Clikt surface in `retoc-cli/main.kt` |
+| `repak/repak_cli/src/main.rs` | `actions/src/main/kotlin/com/github/jpabscale/zenpak4j/repak_actions/RepakActions.kt` | ported (`EXC-005`, `EXC-006`, `EXC-014`, `EXC-016`) | action layer in `:actions` (shared with `:zenpak`); Clikt surface in `repak-cli/main.kt` |
+| `retoc/retoc_cli/src/main.rs` | `actions/src/main/kotlin/com/github/jpabscale/zenpak4j/retoc_actions/RetocActions.kt` | ported (`EXC-011`, `EXC-012`, `EXC-014`, `EXC-016`) | action layer in `:actions` (shared with `:zenpak`); Clikt surface in `retoc-cli/main.kt` |
 | `retoc/load_logger/src/lib.rs` | `load-logger/src/main/kotlin/.../load_logger/lib.kt` | ported (FFM no-op) | `hook` stub |
 
 ## Re-generation

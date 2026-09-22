@@ -4,6 +4,7 @@
 
 package com.github.jpabscale.zenpak4j.retoc
 
+import com.github.jpabscale.zenpak4j.console.Console
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
@@ -218,16 +219,6 @@ class ZenScriptObjects(
         stream.write_vec(script_objects)
     }
 
-    // Rust: retoc/src/script_objects.rs:47 print
-    fun print() {
-        for (s in script_objects) {
-            println("${global_name_map.get(s.object_name)}:")
-            println("  global_index:    ${s.global_index.value()?.let { "0x${it.toString(16).uppercase()}" } ?: "null"}")
-            println("  outer_index:     ${s.outer_index.value()?.let { "0x${it.toString(16).uppercase()}" } ?: "null"}")
-            println("  cdo_class_index: ${s.cdo_class_index.value()?.let { "0x${it.toString(16).uppercase()}" } ?: "null"}")
-        }
-    }
-
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is ZenScriptObjects) return false
@@ -245,6 +236,16 @@ class ZenScriptObjects(
     }
 
     override fun toString(): String = "ZenScriptObjects(global_name_map=$global_name_map, script_objects=$script_objects, script_object_lookup=$script_object_lookup)"
+}
+
+// Rust: retoc/src/script_objects.rs:47 print
+fun Console.print(obj: ZenScriptObjects) {
+    for (s in obj.script_objects) {
+        println("${obj.global_name_map.get(s.object_name)}:")
+        println("  global_index:    ${s.global_index.value()?.let { "0x${it.toString(16).uppercase()}" } ?: "null"}")
+        println("  outer_index:     ${s.outer_index.value()?.let { "0x${it.toString(16).uppercase()}" } ?: "null"}")
+        println("  cdo_class_index: ${s.cdo_class_index.value()?.let { "0x${it.toString(16).uppercase()}" } ?: "null"}")
+    }
 }
 
 // Rust: retoc/src/script_objects.rs:57 FScriptObjectEntry

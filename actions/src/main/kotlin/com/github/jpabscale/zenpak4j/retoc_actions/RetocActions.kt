@@ -6,6 +6,7 @@
 
 package com.github.jpabscale.zenpak4j.retoc_actions
 
+import com.github.jpabscale.zenpak4j.console.Console
 import com.github.jpabscale.zenpak4j.repak.Compression as RepakCompression
 import com.github.jpabscale.zenpak4j.repak.PakBuilder
 import com.github.jpabscale.zenpak4j.repak.Version as RepakVersion
@@ -282,9 +283,11 @@ private fun manifest_to_json(manifest: PackageStoreManifest): String {
 // ---------------------------------------------------------------------------
 // Rust: retoc_cli/src/main.rs:351 fn action_manifest
 // ---------------------------------------------------------------------------
-fun action_manifest(args: ActionManifest, config: Config) {
+fun action_manifest(args: ActionManifest, config: Config) = Console().action_manifest(args, config)
+
+fun Console.action_manifest(args: ActionManifest, config: Config) {
     // Rust: let iostore = iostore::open(args.utoc, config)?;
-    val iostore = open(args.utoc, config)
+    val iostore = open(args.utoc, config, err)
     val container_header_version = iostore.container_header_version() ?: throw IllegalStateException("missing container_header_version")
     val toc_version = iostore.container_file_version() ?: throw IllegalStateException("missing toc_version")
 
@@ -332,14 +335,18 @@ fun action_manifest(args: ActionManifest, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:401 action_info
-fun action_info(args: ActionInfo, config: Config) {
-    val iostore = open(args.path, config)
-    iostore.print_info(0)
+fun action_info(args: ActionInfo, config: Config) = Console().action_info(args, config)
+
+fun Console.action_info(args: ActionInfo, config: Config) {
+    val iostore = open(args.path, config, err)
+    iostore.print_info(0, this)
 }
 
 // Rust: retoc_cli/src/main.rs:407 action_list
-fun action_list(args: ActionList, config: Config) {
-    val iostore = open(args.utoc, config)
+fun action_list(args: ActionList, config: Config) = Console().action_list(args, config)
+
+fun Console.action_list(args: ActionList, config: Config) {
+    val iostore = open(args.utoc, config, err)
     val chunks = if (args.all) iostore.chunks_all() else iostore.chunks()
     for (chunk in chunks) {
         val id = chunk.id()
@@ -386,7 +393,9 @@ fun action_list(args: ActionList, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:461 action_verify
-fun action_verify(args: ActionVerify, config: Config) {
+fun action_verify(args: ActionVerify, config: Config) = Console().action_verify(args, config)
+
+fun Console.action_verify(args: ActionVerify, config: Config) {
     // Rust verifies Toc chunk hashes via blake3 against meta.hash; we mirror via IoStore + Blake3Digest
     val utoc = args.utoc
     val ucas = utoc.resolveSibling(utoc.fileName.toString().substringBeforeLast(".") + ".ucas")
@@ -440,10 +449,12 @@ fun action_verify(args: ActionVerify, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:531 action_unpack
-fun action_unpack(args: ActionUnpack, config: Config) {
+fun action_unpack(args: ActionUnpack, config: Config) = Console().action_unpack(args, config)
+
+fun Console.action_unpack(args: ActionUnpack, config: Config) {
     //@parity:on EXC-012
     val input_paths = args.input.split(File.pathSeparator).map { Path.of(it.trim()) }.filter { it.toString().isNotEmpty() }
-    val iostore = open_with_container_paths(input_paths, config)
+    val iostore = open_with_container_paths(input_paths, config, err)
     //@parity:off EXC-012
     val output = args.output
     Files.createDirectories(output)
@@ -478,8 +489,10 @@ fun action_unpack(args: ActionUnpack, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:614 action_unpack_raw
-fun action_unpack_raw(args: ActionUnpackRaw, config: Config) {
-    val iostore = open(args.utoc, config)
+fun action_unpack_raw(args: ActionUnpackRaw, config: Config) = Console().action_unpack_raw(args, config)
+
+fun Console.action_unpack_raw(args: ActionUnpackRaw, config: Config) {
+    val iostore = open(args.utoc, config, err)
     val output = args.output
     val chunks_dir = output.resolve("chunks")
     val manifest_path = output.resolve("manifest.json")
@@ -585,8 +598,10 @@ fun action_pack_raw(args: ActionPackRaw, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:710 action_to_legacy
-fun action_to_legacy(args: ActionToLegacy, config: Config) {
-    val log = Log.new_stdout(args.verbose, args.debug)
+fun action_to_legacy(args: ActionToLegacy, config: Config) = Console().action_to_legacy(args, config)
+
+fun Console.action_to_legacy(args: ActionToLegacy, config: Config) {
+    val log = new_log(args.verbose, args.debug)
     if (args.dry_run) {
         action_to_legacy_inner(args, config, NullFileWriter(), log)
     } else if (args.output.toString().endsWith(".pak")) {
@@ -630,10 +645,10 @@ fun action_to_legacy(args: ActionToLegacy, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:751 action_to_legacy_inner
-fun action_to_legacy_inner(args: ActionToLegacy, config: Config, file_writer: FileWriterTrait, log: Log) {
+fun Console.action_to_legacy_inner(args: ActionToLegacy, config: Config, file_writer: FileWriterTrait, log: Log) {
     //@parity:on EXC-012
     val input_paths = args.input.split(File.pathSeparator).map { Path.of(it.trim()) }.filter { it.toString().isNotEmpty() }
-    val iostore = open_with_container_paths(input_paths, config)
+    val iostore = open_with_container_paths(input_paths, config, err)
     //@parity:off EXC-012
     if (!args.no_assets) {
         action_to_legacy_assets(args, file_writer, iostore, log)
@@ -652,7 +667,7 @@ fun action_to_legacy_inner(args: ActionToLegacy, config: Config, file_writer: Fi
 // Rust: retoc_cli/src/main.rs:769 progress_style already defined
 
 // Rust: retoc_cli/src/main.rs:773 action_to_legacy_assets
-fun action_to_legacy_assets(args: ActionToLegacy, file_writer: FileWriterTrait, iostore: IoStoreTrait, log: Log) {
+fun Console.action_to_legacy_assets(args: ActionToLegacy, file_writer: FileWriterTrait, iostore: IoStoreTrait, log: Log) {
     val packages_to_extract = mutableListOf<kotlin.Pair<PackageInfo, String>>()
     //@parity:on EXC-012
     val selected_package_ids = mutableSetOf<FPackageId>()
@@ -710,7 +725,7 @@ fun action_to_legacy_assets(args: ActionToLegacy, file_writer: FileWriterTrait, 
 }
 
 // Rust: retoc_cli/src/main.rs:837 action_to_legacy_shaders
-fun action_to_legacy_shaders(args: ActionToLegacy, file_writer: FileWriterTrait, iostore: IoStoreTrait, log: Log) {
+fun Console.action_to_legacy_shaders(args: ActionToLegacy, file_writer: FileWriterTrait, iostore: IoStoreTrait, log: Log) {
     val compress_shaders = !args.no_compres_shaders
     var libraries_extracted = 0
     for (chunk_info in iostore.chunks().filter { it.id().get_chunk_type() == EIoChunkType.ShaderCodeLibrary }) {
@@ -728,7 +743,9 @@ fun action_to_legacy_shaders(args: ActionToLegacy, file_writer: FileWriterTrait,
 }
 
 // Rust: retoc_cli/src/main.rs:862 action_to_zen
-fun action_to_zen(args: ActionToZen, config: Config) {
+fun action_to_zen(args: ActionToZen, config: Config) = Console().action_to_zen(args, config)
+
+fun Console.action_to_zen(args: ActionToZen, config: Config) {
     val input: FileReaderTrait = if (Files.isDirectory(args.input)) FSFileReader(args.input) else PakFileReader.new(args.input)
     action_to_zen_reader(args, config, input)
 }
@@ -738,14 +755,14 @@ fun action_to_zen(args: ActionToZen, config: Config) {
  * pipeline, but loose-file bytes come from [input] instead of FSFileReader(args.input). Everything
  * after reader construction is unchanged from action_to_zen.
  */
-fun action_to_zen_reader(args: ActionToZen, config: Config, input: FileReaderTrait) {
+fun Console.action_to_zen_reader(args: ActionToZen, config: Config, input: FileReaderTrait) {
     val mount_point: UEPath = "../../../"
 
     //@parity:on EXC-011
     val gs_value = args.game_store
     val game_package_names: HashSet<String>? = if (gs_value != null) {
         val game_store_paths = gs_value.split(File.pathSeparator).map { Path.of(it.trim()) }.filter { it.toString().isNotEmpty() }
-        val game_iostore = open_with_container_paths(game_store_paths, config)
+        val game_iostore = open_with_container_paths(game_store_paths, config, err)
         val set = HashSet<String>()
         for (chunk in game_iostore.chunks().filter { it.id().get_chunk_type() == EIoChunkType.ExportBundleData }) {
             val p = chunk.path() ?: continue
@@ -758,7 +775,7 @@ fun action_to_zen_reader(args: ActionToZen, config: Config, input: FileReaderTra
             val gamePath = try { pak_path_to_game_path(withoutMount) } catch (_: Exception) { null }
             if (gamePath != null) set.add(gamePath)
         }
-        try { info(Log.new_stdout(false,false), "Loaded ${set.size} package paths from game store") } catch (_: Exception) {}
+        try { info(new_log(false, false), "Loaded ${set.size} package paths from game store") } catch (_: Exception) {}
         set
     } else null
     //@parity:off EXC-011
@@ -768,7 +785,7 @@ fun action_to_zen_reader(args: ActionToZen, config: Config, input: FileReaderTra
 
     val writer = IoStoreWriter.new(args.output, toc_version, container_header_version, mount_point)
 
-    val log = Log.new_stdout(args.verbose, args.debug)
+    val log = new_log(args.verbose, args.debug)
     val asset_paths = mutableListOf<UEPathBuf>()
     val shader_lib_paths = mutableListOf<UEPathBuf>()
     var script_objects: ZenScriptObjects? = null
@@ -956,16 +973,18 @@ fun action_to_zen_reader(args: ActionToZen, config: Config, input: FileReaderTra
 }
 
 // Rust: retoc_cli/src/main.rs:1092 action_get
-fun action_get(args: ActionGet, config: Config) {
-    val iostore = open(args.input, config)
+fun action_get(args: ActionGet, config: Config) = Console().action_get(args, config)
+
+fun Console.action_get(args: ActionGet, config: Config) {
+    val iostore = open(args.input, config, err)
     val data = iostore.read_raw(args.chunk_id)
     val outPath = args.output
     if (outPath != null && outPath.toString() != "-") {
         Files.createDirectories(outPath.parent ?: Path.of("."))
         Files.write(outPath, data, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
     } else {
-        System.out.write(data)
-        System.out.flush()
+        out.write(data)
+        out.flush()
     }
 }
 
@@ -1076,7 +1095,9 @@ fun action_dump_test(args: ActionDumpTest, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:1156 action_gen_script_objects
-fun action_gen_script_objects(args: ActionGenScriptObjects, config: Config) {
+fun action_gen_script_objects(args: ActionGenScriptObjects, config: Config) = Console().action_gen_script_objects(args, config)
+
+fun Console.action_gen_script_objects(args: ActionGenScriptObjects, config: Config) {
     // Parse jmap reflection dump (JSON) matching Rust's jmap crate schema:
     // {"objects": {path: {"type": "Class", "outer": ..., "class_default_object": ...}}}
     val root = JSONObject(Files.readString(args.input))
@@ -1134,14 +1155,18 @@ fun action_gen_script_objects(args: ActionGenScriptObjects, config: Config) {
 }
 
 // Rust: retoc_cli/src/main.rs:1235 action_print_script_objects
-fun action_print_script_objects(args: ActionPrintScriptObjects, config: Config) {
-    val iostore = open(args.input, config)
+fun action_print_script_objects(args: ActionPrintScriptObjects, config: Config) = Console().action_print_script_objects(args, config)
+
+fun Console.action_print_script_objects(args: ActionPrintScriptObjects, config: Config) {
+    val iostore = open(args.input, config, err)
     val script_objects = iostore.load_script_objects()
-    script_objects.print()
+    print(script_objects)
 }
 
 // Rust: retoc_cli/src/main.rs:1242 action_asset_registry
-fun action_asset_registry(args: ActionAssetRegistry, config: Config) {
+fun action_asset_registry(args: ActionAssetRegistry, config: Config) = Console().action_asset_registry(args, config)
+
+fun Console.action_asset_registry(args: ActionAssetRegistry, config: Config) {
     val data = Files.readAllBytes(args.input)
     val registry = AssetRegistry().deserialize(ByteArrayInputStream(data))
     println("Asset Registry")

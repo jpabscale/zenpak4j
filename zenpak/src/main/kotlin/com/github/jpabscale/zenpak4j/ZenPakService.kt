@@ -10,6 +10,7 @@
 
 package com.github.jpabscale.zenpak4j
 
+import com.github.jpabscale.zenpak4j.console.Console
 import com.github.jpabscale.zenpak4j.oodle_loader.oodle
 import com.github.jpabscale.zenpak4j.repak.Compression
 import com.github.jpabscale.zenpak4j.repak.Version
@@ -30,6 +31,7 @@ import com.github.jpabscale.zenpak4j.retoc.UEPathBuf
 import com.github.jpabscale.zenpak4j.retoc.set_global_game_id
 import com.github.jpabscale.zenpak4j.retoc.EIoChunkType
 import com.github.jpabscale.zenpak4j.retoc.FIoChunkIdRaw
+import com.github.jpabscale.zenpak4j.retoc.new_log
 import com.github.jpabscale.zenpak4j.retoc.open
 import com.github.jpabscale.zenpak4j.retoc_actions.ActionGet
 import com.github.jpabscale.zenpak4j.retoc_actions.ActionPackRaw
@@ -48,6 +50,7 @@ import com.github.jpabscale.zenpak4j.retoc_actions.action_unpack_raw
 import java.util.HexFormat
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.PrintStream
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
@@ -60,6 +63,11 @@ import java.nio.file.StandardOpenOption
  *
  * Motivation: avoid per-asset subprocess round-trips (fork + IPC + temp-dir) — same win as
  * uasset4j's in-JVM pipeline, without shelling out to the bundled tools.
+ *
+ * Printing entry points take `out: PrintStream? = null` / `err: PrintStream? = null` (null =
+ * System.out / System.err, today's behavior): both streams are bound through the EXC-016
+ * `Console` seam, so an embedder passing its own streams gets no output on the host's stdout or
+ * stderr (CLI-visible output includes the composite-container and ContainerHeader warnings).
  */
 object ZenPakService {
 
@@ -89,11 +97,14 @@ object ZenPakService {
         path_hash_seed: ULong = 0u,
         game_id: String? = null,
         verbose: Boolean = false,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         // game-id is consumed via the ThreadLocal global on the calling thread (EXC-005);
         // always assign so a null clears any stale value from a previous call on this thread.
         global_game_id = game_id
-        pack(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.pack(
             ActionPack(
                 input = inputDir.toString(),
                 output = outputPak.toString(),
@@ -121,8 +132,10 @@ object ZenPakService {
         game_id: String? = null,
         include: List<String> = emptyList(),
         verbose: Boolean = false,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
-        repak_unpack(listOf(pakFile), outputDir, strip_prefix, aes_key, game_id, include, verbose)
+        repak_unpack(listOf(pakFile), outputDir, strip_prefix, aes_key, game_id, include, verbose, out, err)
     }
 
     /** Multi-pak variant of [repak_unpack]: first-match priority across [pakFiles]. */
@@ -134,9 +147,12 @@ object ZenPakService {
         game_id: String? = null,
         include: List<String> = emptyList(),
         verbose: Boolean = false,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         global_game_id = game_id
-        unpack(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.unpack(
             aes_key?.let { AesKey.from_string(it) },
             ActionUnpack(
                 input = pakFiles.map { it.toString() },
@@ -216,6 +232,8 @@ object ZenPakService {
         verbose: Boolean = false,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         set_global_game_id(game_id)
         // AES keys ride the Config (used when reading the game store), like the CLI's -a.
@@ -226,7 +244,8 @@ object ZenPakService {
             override_toc_version?.let { toc_version_override = it }
             override_container_header_version?.let { container_header_version_override = it }
         }
-        action_to_zen(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.action_to_zen(
             ActionToZen(
                 input = inputDir,
                 output = outputUtoc,
@@ -258,9 +277,11 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         retoc_to_legacy(inputFile, outputDir, engine_version, null, game_id,
-            override_toc_version, override_container_header_version)
+            override_toc_version, override_container_header_version, out, err)
     }
 
     fun retoc_to_legacy(
@@ -271,10 +292,14 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         retoc_to_legacy(listOf(inputFile), outputDir, engine_version, filter, game_id,
             override_toc_version = override_toc_version,
-            override_container_header_version = override_container_header_version)
+            override_container_header_version = override_container_header_version,
+            out = out,
+            err = err)
     }
 
     fun retoc_to_legacy(
@@ -286,6 +311,8 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
@@ -295,7 +322,8 @@ object ZenPakService {
             override_toc_version?.let { toc_version_override = it }
             override_container_header_version?.let { container_header_version_override = it }
         }
-        action_to_legacy(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.action_to_legacy(
             ActionToLegacy(
                 input = inputFiles.joinToString(File.pathSeparator),
                 output = outputDir,
@@ -332,9 +360,11 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         retoc_unpack(listOf(utocFile), outputDir, filter, aes_key, game_id,
-            override_toc_version, override_container_header_version)
+            override_toc_version, override_container_header_version, out, err)
     }
 
     fun retoc_unpack(
@@ -345,6 +375,8 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
@@ -354,7 +386,8 @@ object ZenPakService {
             override_toc_version?.let { toc_version_override = it }
             override_container_header_version?.let { container_header_version_override = it }
         }
-        action_unpack(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.action_unpack(
             RetocActionUnpack(
                 input = inputFiles.joinToString(File.pathSeparator),
                 output = outputDir,
@@ -378,6 +411,8 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
@@ -387,7 +422,8 @@ object ZenPakService {
             override_toc_version?.let { toc_version_override = it }
             override_container_header_version?.let { container_header_version_override = it }
         }
-        action_unpack_raw(ActionUnpackRaw(utoc = input, output = outputDir), config)
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.action_unpack_raw(ActionUnpackRaw(utoc = input, output = outputDir), config)
     }
 
     /**
@@ -410,16 +446,17 @@ object ZenPakService {
         includePayloads: Boolean = false,
         aes_key: String? = null,
         game_id: String? = null,
+        err: PrintStream? = null,
     ): String {
-        val info = retoc_locate_package_chunk(container, pathSuffix, aes_key, game_id)
+        val info = retoc_locate_package_chunk(container, pathSuffix, aes_key, game_id, err = err)
             ?: throw IllegalStateException("no package chunk matches '$pathSuffix' in $container")
         val tmp = java.nio.file.Files.createTempDirectory("zen-tables")
         try {
             val chunk = tmp.resolve("chunk.bin")
-            retoc_get(container, info.chunkIdHex, chunk, aes_key, game_id)
+            retoc_get(container, info.chunkIdHex, chunk, aes_key, game_id, err = err)
             val headerDir = tmp.resolve("header")
             java.nio.file.Files.createDirectories(headerDir)
-            retoc_extract_container_header(container, headerDir, aes_key, game_id)
+            retoc_extract_container_header(container, headerDir, aes_key, game_id, err = err)
             val headerFile = java.nio.file.Files.list(headerDir).use { s -> s.findFirst().orElse(null) }
                 ?: throw IllegalStateException("no container header extracted from $container")
             val entry = com.github.jpabscale.zenpak4j.retoc.store_entry_of_container_header(
@@ -445,16 +482,19 @@ object ZenPakService {
         patchText: String,
         aes_key: String? = null,
         game_id: String? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ): ByteArray {
-        val info = retoc_locate_package_chunk(container, pathSuffix, aes_key, game_id)
+        val console = Console(out ?: System.out, err ?: System.err)
+        val info = retoc_locate_package_chunk(container, pathSuffix, aes_key, game_id, err = err)
             ?: throw IllegalStateException("no package chunk matches '$pathSuffix' in $container")
         val tmp = java.nio.file.Files.createTempDirectory("zen-tables-apply")
         try {
             val chunk = tmp.resolve("chunk.bin")
-            retoc_get(container, info.chunkIdHex, chunk, aes_key, game_id)
+            retoc_get(container, info.chunkIdHex, chunk, aes_key, game_id, err = err)
             val headerDir = tmp.resolve("header")
             java.nio.file.Files.createDirectories(headerDir)
-            retoc_extract_container_header(container, headerDir, aes_key, game_id)
+            retoc_extract_container_header(container, headerDir, aes_key, game_id, err = err)
             val headerFile = java.nio.file.Files.list(headerDir).use { s -> s.findFirst().orElse(null) }
                 ?: throw IllegalStateException("no container header extracted from $container")
             val entry = com.github.jpabscale.zenpak4j.retoc.store_entry_of_container_header(
@@ -471,7 +511,7 @@ object ZenPakService {
             if (findings.isNotEmpty()) {
                 throw IllegalStateException("patched chunk fails validation: $findings")
             }
-            println("Applied $applied Zen table edit(s)")
+            console.println("Applied $applied Zen table edit(s)")
             return bytes
         } finally {
             tmp.toFile().deleteRecursively()
@@ -539,6 +579,8 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
@@ -548,7 +590,8 @@ object ZenPakService {
             override_toc_version?.let { toc_version_override = it }
             override_container_header_version?.let { container_header_version_override = it }
         }
-        action_get(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.action_get(
             ActionGet(input = input, chunk_id = FIoChunkIdRaw.from_string(chunkIdHex), output = output),
             config
         )
@@ -566,6 +609,7 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        err: PrintStream? = null,
     ): RetocPackageChunkInfo? {
         set_global_game_id(game_id)
         val config = Config().apply {
@@ -575,7 +619,7 @@ object ZenPakService {
             override_toc_version?.let { toc_version_override = it }
             override_container_header_version?.let { container_header_version_override = it }
         }
-        val iostore = open(input, config)
+        val iostore = open(input, config, err ?: System.err)
         val chunk = iostore.chunks().firstOrNull { it.path()?.endsWith(pathSuffix) == true }
             ?: return null
         return RetocPackageChunkInfo(
@@ -600,6 +644,7 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        err: PrintStream? = null,
     ): String {
         set_global_game_id(game_id)
         val config = Config().apply {
@@ -609,7 +654,7 @@ object ZenPakService {
             override_toc_version?.let { toc_version_override = it }
             override_container_header_version?.let { container_header_version_override = it }
         }
-        val iostore = open(input, config)
+        val iostore = open(input, config, err ?: System.err)
         val header = iostore.chunks().firstOrNull { it.id().get_chunk_type() == EIoChunkType.ContainerHeader }
             ?: throw IllegalStateException("no ContainerHeader chunk in $input")
         val chunkIdHex = HexFormat.of().formatHex(header.id().get_raw().id)
@@ -640,6 +685,8 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
         on_file: (path: String, allow_compress: Boolean, data: ByteArray) -> Unit,
     ) {
         set_global_game_id(game_id)
@@ -654,7 +701,8 @@ object ZenPakService {
             override fun write_file(path: String, allow_compress: Boolean, data: ByteArray) =
                 on_file(path, allow_compress, data)
         }
-        action_to_legacy_inner(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.action_to_legacy_inner(
             ActionToLegacy(
                 input = inputFiles.joinToString(File.pathSeparator),
                 output = Files.createTempDirectory("zenpak-legacy-mem"),
@@ -672,7 +720,7 @@ object ZenPakService {
             ),
             config,
             writer,
-            com.github.jpabscale.zenpak4j.retoc.Log.new_stdout(false, false)
+            console.new_log(false, false)
         )
     }
 
@@ -697,6 +745,8 @@ object ZenPakService {
         game_id: String? = null,
         override_toc_version: EIoStoreTocVersion? = null,
         override_container_header_version: EIoContainerHeaderVersion? = null,
+        out: PrintStream? = null,
+        err: PrintStream? = null,
     ) {
         set_global_game_id(game_id)
         val config = Config().apply {
@@ -711,7 +761,8 @@ object ZenPakService {
             override fun read_opt(path: UEPath): ByteArray? = read_opt(path)
             override fun list_files(): List<UEPathBuf> = list_files()
         }
-        action_to_zen_reader(
+        val console = Console(out ?: System.out, err ?: System.err)
+        console.action_to_zen_reader(
             ActionToZen(
                 input = outputUtoc,
                 output = outputUtoc,

@@ -3,9 +3,14 @@
 Parity audit for zenpak4j: verifies that every ported Kotlin file exposes the same public member names as its
 pinned Rust counterpart (the milestone-closure checklist).
 
-For each `ported` row in docs/port-tracker.md, extract public member identifiers from the Rust file
-and the Kotlin file, then report Rust members missing from the Kotlin side. Exits non-zero on any
-unexpected mismatch so it can gate a milestone commit.
+For each `ported` row in docs/port-tracker.md (including `ported (EXC-...)` / `ported (FFM...)`
+annotations, so an exception id never silently drops a file from member coverage), extract public
+member identifiers from the Rust file and the Kotlin file, then report Rust members missing from
+the Kotlin side. Exits non-zero on any unexpected mismatch so it can gate a milestone commit.
+
+It also enforces the EXC-016 console seam (mapping §13): library main sources must not write to
+the process stdout/stderr directly; the `Console(out = System.out, err = System.err)` defaults
+and the pin-shaped `StdoutLogBackend` are the only bindings.
 
 Mappings applied (see docs/mapping.md):
   - Rust snake_case names are preserved verbatim in Kotlin (rg "fun read_encoded" parity check).
@@ -89,6 +94,11 @@ DEFERRED_EXEMPTIONS = {
     "repak/repak/src/lib.rs": {
         "global",
     },
+    # load_logger is the Windows proxy-DLL hook (tracker: `ported (FFM no-op)`, `hook` stub on
+    # Linux); the three hooked originals have no Kotlin counterpart by design.
+    "retoc/load_logger/src/lib.rs": {
+        "CheckForCyclesInner", "EventDrivenCreateExport", "EventDrivenIndexToObject",
+    },
 }
 
 # tokens that are never member names
@@ -165,6 +175,47 @@ def kt_members(path):
             if m:
                 members.add(m.group(1))
     return members
+
+
+# EXC-016 console seam: library main sources must not write to the process stdout/stderr directly.
+# The only stream bindings are Console's defaults (`System.out`/`System.err` in
+# console/Console.kt) and the pin-shaped StdoutLogBackend (CLI Log); tests, the CLI mains and the
+# CLI-only dump commands are out of scope (mapping §13).
+CONSOLE_SEAM_SOURCES = ["repak/src/main", "retoc/src/main", "actions/src/main", "zenpak/src/main"]
+CONSOLE_SEAM_STDOUT_RE = re.compile(r"System\.out\s*\.\s*\w|kotlin\.io\.(?:print|println)")
+CONSOLE_SEAM_STDERR_RE = re.compile(r"System\.err\s*\.\s*\w")
+CONSOLE_SEAM_STDERR_ALLOW = {
+    # Rust: retoc/src/logging.rs:66 StdoutLogBackend — pin-shaped CLI backend (Error+ to System.err)
+    "retoc/src/main/kotlin/com/github/jpabscale/zenpak4j/retoc/logging.kt",
+}
+
+
+def check_console_seam(root):
+    errors = []
+    scanned = 0
+    for rel in CONSOLE_SEAM_SOURCES:
+        base = os.path.join(root, rel)
+        if not os.path.isdir(base):
+            continue
+        for dirpath, _, files in os.walk(base):
+            for fn in sorted(files):
+                if not fn.endswith(".kt"):
+                    continue
+                path = os.path.join(dirpath, fn)
+                scanned += 1
+                rel_path = os.path.relpath(path, root)
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    for i, line in enumerate(f, 1):
+                        code = line.split("//", 1)[0]
+                        leak = CONSOLE_SEAM_STDOUT_RE.search(code) or (
+                            CONSOLE_SEAM_STDERR_RE.search(code) and rel_path not in CONSOLE_SEAM_STDERR_ALLOW
+                        )
+                        if leak:
+                            errors.append(
+                                f"  {rel_path}:{i}: "
+                                f"direct stdout/stderr write bypasses Console: {line.strip()}"
+                            )
+    return errors, scanned
 
 
 def find_rust_file(rust_rel):
@@ -248,9 +299,11 @@ def main():
 
     pairs = []
     # Match port-tracker rows: | `repak/repak/src/lib.rs` | `repak/src/main/kotlin/.../repak/lib.kt` | ported |
-    for m in re.finditer(r"\| `([^`]+\.rs)` \| `([^`]+\.kt)` \| (\w+) \|", tracker):
-        rust_rel, kt_rel, status = m.group(1), m.group(2), m.group(3)
-        if status == "ported":
+    # `ported (EXC-...)` / `ported (FFM...)` rows stay in scope: the annotation records an approved
+    # divergence, it must not remove the file from member coverage (review checklist 3).
+    for m in re.finditer(r"\| `([^`]+\.rs)` \| `([^`]+\.kt)` \| ([^|]+?) \|", tracker):
+        rust_rel, kt_rel, status = m.group(1), m.group(2), m.group(3).strip()
+        if status == "ported" or status.startswith("ported ("):
             # Port-tracker uses `...` placeholder for the middle package part; expand to full path
             # e.g., `repak/src/main/kotlin/.../repak/lib.kt` -> need to resolve actual file
             if "..." in kt_rel:
@@ -334,6 +387,15 @@ def main():
         return 1
     if ids_used:
         print(f"parity markers ok: {', '.join(sorted(ids_used))}")
+
+    seam_errors, seam_scanned = check_console_seam(REPO)
+    if seam_errors:
+        print("\nCONSOLE SEAM VIOLATIONS:")
+        for line in seam_errors:
+            print(line)
+        print("\nPorted stdout/stderr writes must route through Console (mapping §13 / EXC-016).")
+        return 1
+    print(f"console seam ok: no direct stdout/stderr writes in {seam_scanned} library main sources")
 
     print("\nPARITY AUDIT: GREEN")
     return 0

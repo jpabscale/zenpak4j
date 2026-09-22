@@ -3,6 +3,7 @@ package com.github.jpabscale.zenpak4j.retoc
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import com.github.jpabscale.zenpak4j.console.Console
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -484,7 +485,7 @@ class AssetConversionTest {
         override fun mount_point(): String = ""
         override fun container_file_version(): EIoStoreTocVersion = containerVersion
         override fun container_header_version(): EIoContainerHeaderVersion = headerVersion
-        override fun print_info(depth: Int) {}
+        override fun print_info(depth: Int, console: Console) {}
 
         override fun read(chunk_id: FIoChunkId): ByteArray {
             val type = chunk_id.get_chunk_type()

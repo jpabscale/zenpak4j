@@ -4,6 +4,8 @@
 
 package com.github.jpabscale.zenpak4j.retoc
 
+import com.github.jpabscale.zenpak4j.console.Console
+import java.io.PrintStream
 import java.util.concurrent.atomic.AtomicReference
 
 // Rust: retoc/src/logging.rs:47 LogLevel
@@ -44,6 +46,20 @@ class StdoutLogBackend : LogBackend {
         }
     }
 }
+
+//@parity:on EXC-016
+// StdoutLogBackend's exact line format bound to injectable streams: non-error lines to
+// [out], Error+ to [err] (same split as StdoutLogBackend, so CLI stderr stays identical).
+class PrintStreamLogBackend(private val out: PrintStream, private val err: PrintStream = System.err) : LogBackend {
+    override fun write_message(level: LogLevel, msg: String) {
+        if (level >= LogLevel.Error) {
+            err.println("$level: $msg")
+        } else {
+            out.println("$level: $msg")
+        }
+    }
+}
+//@parity:off EXC-016
 
 // Rust: retoc/src/logging.rs:77 NoopLogBackend
 class NoopLogBackend : LogBackend {

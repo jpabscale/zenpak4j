@@ -7,6 +7,7 @@
 
 package com.github.jpabscale.zenpak4j.repak_actions
 
+import com.github.jpabscale.zenpak4j.console.Console
 import com.github.jpabscale.zenpak4j.repak.Compression
 import com.github.jpabscale.zenpak4j.repak.PakBuilder
 import com.github.jpabscale.zenpak4j.repak.RepakContext
@@ -165,14 +166,14 @@ const val STYLE: String = "[{elapsed_precise}] [{wide_bar}] {pos}/{len} ({eta})"
 
 // Rust: repak_cli/src/main.rs:313 enum Output
 // Rust: repak_cli/src/main.rs:313
-sealed class Output {
-    data class Progress(val bar: Any) : Output()
-    object Stdout : Output()
+sealed class Output(private val console: Console) {
+    data class Progress(val bar: Any, val console: Console) : Output(console)
+    class Stdout(console: Console) : Output(console)
 
     fun println(msg: String) {
         when (this) {
-            is Progress -> kotlin.io.println(msg)
-            is Stdout -> kotlin.io.println(msg)
+            is Progress -> console.println(msg)
+            is Stdout -> console.println(msg)
         }
     }
 }
@@ -264,7 +265,9 @@ private fun matches_include(stripped: Path, includes: List<String>): Boolean {
 // ---------------------------------------------------------------------------
 // Rust: repak_cli/src/main.rs:200 fn info
 // ---------------------------------------------------------------------------
-fun info(aes_key: AesKey?, action: ActionInfo) {
+fun info(aes_key: AesKey?, action: ActionInfo) = Console().info(aes_key, action)
+
+fun Console.info(aes_key: AesKey?, action: ActionInfo) {
         // Rust: let mut builder = repak::PakBuilder::new();
         var builder = PakBuilder.new()
         // Rust: if let Some(aes_key) = aes_key { builder = builder.key(aes_key); }
@@ -300,7 +303,9 @@ fun info(aes_key: AesKey?, action: ActionInfo) {
 }
 
 // Rust: repak_cli/src/main.rs:222 fn list
-fun list(aes_key: AesKey?, action: ActionList) {
+fun list(aes_key: AesKey?, action: ActionList) = Console().list(aes_key, action)
+
+fun Console.list(aes_key: AesKey?, action: ActionList) {
         // Rust: let mut builder = repak::PakBuilder::new();
         var builder = PakBuilder.new()
         // Rust: if let Some(aes_key) = aes_key { builder = builder.key(aes_key); }
@@ -333,7 +338,9 @@ fun list(aes_key: AesKey?, action: ActionList) {
 }
 
 // Rust: repak_cli/src/main.rs:255 fn hash_list
-fun hash_list(aes_key: AesKey?, action: ActionHashList) {
+fun hash_list(aes_key: AesKey?, action: ActionHashList) = Console().hash_list(aes_key, action)
+
+fun Console.hash_list(aes_key: AesKey?, action: ActionHashList) {
         // Rust: let mut builder = repak::PakBuilder::new();
         var builder = PakBuilder.new()
         // Rust: if let Some(aes_key) = aes_key { builder = builder.key(aes_key); }
@@ -409,7 +416,9 @@ fun hash_list(aes_key: AesKey?, action: ActionHashList) {
 }
 
 // Rust: repak_cli/src/main.rs:327 fn unpack
-fun unpack(aes_key: AesKey?, action: ActionUnpack) {
+fun unpack(aes_key: AesKey?, action: ActionUnpack) = Console().unpack(aes_key, action)
+
+fun Console.unpack(aes_key: AesKey?, action: ActionUnpack) {
         //@parity:on EXC-006
         // Rust: let inputs = action.input.iter().flat_map(|input| std::env::split_paths(OsStr::new(input))).collect::<Vec<_>>();
         val inputs = action.input.flatMap { split_paths(it) }
@@ -507,7 +516,7 @@ fun unpack(aes_key: AesKey?, action: ActionUnpack) {
         val total_entries = entries_by_input.sumOf { it.size }
         // Rust: let progress = (!action.quiet).then(|| ProgressBar::new(total_entries as u64).with_style(ProgressStyle::with_template(STYLE).unwrap()));
         // Rust: let log = match &progress { Some(progress) => Output::Progress(progress.clone()), None => Output::Stdout };
-        val log: Output = Output.Stdout
+        val log: Output = Output.Stdout(this)
         // progress ignored; we keep log as Stdout for parity
         // Rust: for (input, entries) in inputs.iter().zip(entries_by_input) { if entries.is_empty() { continue; } let mut builder = PakBuilder::new(); if let Some(aes_key) = aes_key.clone() { builder = builder.key(aes_key); } let mut pak_file = BufReader::new(File::open(input)?); let pak = builder.reader(&mut pak_file)?; entries.par_iter().try_for_each_init(|| File::open(input), |file, entry| { if action.verbose { log.println(format!("unpacking {}", entry.entry_path)) } fs::create_dir_all(&entry.out_dir)?; pak.read_file(&entry.entry_path, &mut BufReader::new(file.as_ref().map_err(|e| RepakError::Other(format!("error reading pak: {e}")))?), &mut fs::File::create(&entry.out_path)?)?; if let Some(progress) = &progress { progress.inc(1); } Ok(()) })?; }
         for ((inputStr, entries) in inputs.zip(entries_by_input)) {
@@ -562,7 +571,9 @@ fun unpack(aes_key: AesKey?, action: ActionUnpack) {
 }
 
 // Rust: repak_cli/src/main.rs:492 fn pack
-fun pack(action: ActionPack) {
+fun pack(action: ActionPack) = Console().pack(action)
+
+fun Console.pack(action: ActionPack) {
         // Rust: let output = args.output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("{}.pak", args.input)));
         val output: Path = if (action.output != null) {
             Paths.get(action.output)
@@ -599,7 +610,7 @@ fun pack(action: ActionPack) {
         try {
             val writer = builder.writer(channel, action.version, action.mount_point, action.path_hash_seed, current_context())
             // Rust: use indicatif::ProgressIterator; let iter = paths.iter(); let (log, iter) = if !args.quiet { let iter = iter.progress_with_style(ProgressStyle::with_template(STYLE).unwrap()); (Output::Progress(iter.progress.clone()), Either::Left(iter)) } else { (Output::Stdout, Either::Right(iter)) };
-            val log: Output = Output.Stdout
+            val log: Output = Output.Stdout(this)
             // Rust: let mut result = None; let result_ref = &mut result; rayon::in_place_scope(|scope| -> Result<(), repak::Error> { let (tx, rx) = sync_channel(0); let entry_builder = pak.entry_builder(); scope.spawn(move |_| { *result_ref = Some(iter.par_bridge().try_for_each(|p| { let rel = &p.strip_prefix(input_path).expect("file not in input directory").to_slash().expect("failed to convert to slash path"); if args.verbose { log.println(format!("packing {}", &rel)) } let entry = entry_builder.build_entry(true, std::fs::read(p)?)?; tx.send((rel.to_string(), entry)).unwrap(); Ok(()) })); }); for (path, entry) in rx { pak.write_entry(path, entry)?; } Ok(()) })?; result.unwrap()?;
             // Kotlin: Channel(0) rendezvous + parallel compress via coroutineScope
             val entry_builder = writer.entry_builder()
@@ -656,7 +667,9 @@ fun pack(action: ActionPack) {
 }
 
 // Rust: repak_cli/src/main.rs:587 fn get
-fun get(aes_key: AesKey?, action: ActionGet) {
+fun get(aes_key: AesKey?, action: ActionGet) = Console().get(aes_key, action)
+
+fun Console.get(aes_key: AesKey?, action: ActionGet) {
         // Rust: let mut reader = BufReader::new(File::open(&args.input)?);
         // Rust: let mut builder = repak::PakBuilder::new(); if let Some(aes_key) = aes_key { builder = builder.key(aes_key); }
         var builder = PakBuilder.new()
@@ -681,8 +694,8 @@ fun get(aes_key: AesKey?, action: ActionGet) {
             // Rust: std::io::stdout().write_all(&pak.get(&file.to_slash_lossy(), &mut reader)?)?;
             val slash = to_slash_lossy(file)
             val data = pak.get(slash, reader)
-            System.out.write(data)
-            System.out.flush()
+            out.write(data)
+            out.flush()
         }
 }
 //@parity:off EXC-014

@@ -4,8 +4,10 @@
 
 package com.github.jpabscale.zenpak4j.retoc
 
+import com.github.jpabscale.zenpak4j.console.Console
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.HashSet
@@ -17,11 +19,11 @@ import kotlin.io.path.nameWithoutExtension
 // Rust: retoc/src/iostore.rs:21 macro_rules! indent_println!
 // ---------------------------------------------------------------------------
 // Rust: retoc/src/iostore.rs:21
-fun indent_println(indent: Int, message: String) {
+fun Console.indent_println(indent: Int, message: String) {
     println(" ".repeat(2 * indent) + message)
 }
 
-fun indent_println(indent: Int, format: String, vararg args: Any?) {
+fun Console.indent_println(indent: Int, format: String, vararg args: Any?) {
     val msg = if (args.isEmpty()) format else format.format(*args)
     println(" ".repeat(2 * indent) + msg)
 }
@@ -72,24 +74,24 @@ fun <T> unique_sequence(inner: Sequence<T>): Sequence<T> = Sequence { UniqueIter
 // Rust: retoc/src/iostore.rs:58 open
 // ---------------------------------------------------------------------------
 // Rust: retoc/src/iostore.rs:58
-fun open(path: Path, config: Config): IoStoreTrait {
+fun open(path: Path, config: Config, err: PrintStream = System.err): IoStoreTrait {
     return if (Files.isDirectory(path)) {
-        IoStoreBackend.open(path, config)
+        IoStoreBackend.open(path, config, err)
     } else {
-        IoStoreContainer.open(path, config)
+        IoStoreContainer.open(path, config, err)
     }
 }
 
-fun open(path: String, config: Config): IoStoreTrait = open(Path.of(path), config)
+fun open(path: String, config: Config, err: PrintStream = System.err): IoStoreTrait = open(Path.of(path), config, err)
 
 // ---------------------------------------------------------------------------
 // Rust: retoc/src/iostore.rs:64 open_with_container_paths
 // ---------------------------------------------------------------------------
 //@parity:on EXC-009
 // Rust: retoc/src/iostore.rs:64
-fun open_with_container_paths(paths: List<Path>, config: Config): IoStoreTrait {
+fun open_with_container_paths(paths: List<Path>, config: Config, err: PrintStream = System.err): IoStoreTrait {
     val container_paths = paths.flatMap { collect_container_paths(it) }
-    return IoStoreBackend.open_paths(container_paths, config)
+    return IoStoreBackend.open_paths(container_paths, config, err)
 }
 //@parity:off EXC-009
 
@@ -171,7 +173,7 @@ interface IoStoreTrait {
     //@parity:off EXC-009
     fun container_file_version(): EIoStoreTocVersion?
     fun container_header_version(): EIoContainerHeaderVersion?
-    fun print_info(depth: Int)
+    fun print_info(depth: Int, console: Console)
 
     fun read(chunk_id: FIoChunkId): ByteArray
     fun read_raw(chunk_id_raw: FIoChunkIdRaw): ByteArray
@@ -271,14 +273,14 @@ class IoStoreBackend private constructor(
         fun new(): IoStoreBackend = IoStoreBackend(emptyList())
 
         // Rust: retoc/src/iostore.rs:249 open
-        fun open(dir: Path, config: Config): IoStoreBackend {
-            return open_paths(collect_container_paths(dir), config)
+        fun open(dir: Path, config: Config, err: PrintStream = System.err): IoStoreBackend {
+            return open_paths(collect_container_paths(dir), config, err)
         }
 
         // Rust: retoc/src/iostore.rs:253 open_paths
-        fun open_paths(container_paths: List<Path>, config: Config): IoStoreBackend {
+        fun open_paths(container_paths: List<Path>, config: Config, err: PrintStream = System.err): IoStoreBackend {
             val containers: List<IoStoreTrait> = container_paths.map { path ->
-                IoStoreContainer.open(path, config) as IoStoreTrait
+                IoStoreContainer.open(path, config, err) as IoStoreTrait
             }
 
             //@parity:on EXC-009
@@ -298,7 +300,7 @@ class IoStoreBackend private constructor(
                 }
                 if (this_container_version != previous_container_version) {
                     if (allow_mixed) {
-                        System.err.println("warning: composite container mixes TOC versions: Container $previous_container_name and $this_container_name have different versions $previous_container_version and $this_container_version")
+                        err.println("warning: composite container mixes TOC versions: Container $previous_container_name and $this_container_name have different versions $previous_container_version and $this_container_version")
                     } else {
                         throw IllegalArgumentException("Cannot create composite container for containers of different versions: Container $previous_container_name and $this_container_name have different versions $previous_container_version and $this_container_version. Use --override-toc-version to allow mixing.")
                     }
@@ -312,7 +314,7 @@ class IoStoreBackend private constructor(
                     }
                     if (this_container_header_version != previous_header_container_version) {
                         if (allow_mixed) {
-                            System.err.println("warning: composite container mixes header versions: Container $previous_header_container_name and $this_container_name have different versions $previous_header_container_version and $this_container_header_version")
+                            err.println("warning: composite container mixes header versions: Container $previous_header_container_name and $this_container_name have different versions $previous_header_container_version and $this_container_header_version")
                         } else {
                             throw IllegalArgumentException("Cannot create composite container for containers of different header versions: Container $previous_header_container_name and $this_container_name have different versions $previous_header_container_version and $this_container_header_version. Use --override-toc-version to allow mixing.")
                         }
@@ -336,14 +338,14 @@ class IoStoreBackend private constructor(
 
     override fun container_header_version(): EIoContainerHeaderVersion? = containers.firstNotNullOfOrNull { it.container_header_version() }
 
-    override fun print_info(depth: Int) {
+    override fun print_info(depth: Int, console: Console) {
         var d = depth
-        indent_println(d, container_name())
+        console.indent_println(d, container_name())
         d += 1
         if (child_containers().count() != 0) {
-            indent_println(d, "child containers (${containers.size}):")
+            console.indent_println(d, "child containers (${containers.size}):")
             for (container in child_containers()) {
-                container.print_info(d + 1)
+                container.print_info(d + 1, console)
             }
         }
     }
@@ -421,7 +423,7 @@ class IoStoreContainer(
 
     companion object {
         // Rust: retoc/src/iostore.rs:406 open
-        fun open(toc_path: Path, config: Config): IoStoreContainer {
+        fun open(toc_path: Path, config: Config, err: PrintStream = System.err): IoStoreContainer {
             val path = toc_path
             // Rust: let toc: Toc = BufReader::new(fs::File::open(&path)?).de_ctx(config.clone())?;
             val toc: Toc = Files.newInputStream(path).use { stream ->
@@ -452,14 +454,14 @@ class IoStoreContainer(
                     val header = FIoContainerHeader.deserialize(ByteArrayInputStream(data), config.container_header_version_override)
                     container.container_header = header
                 } catch (e: Exception) {
-                    System.err.println("Failed to parse ContainerHeader ($chunk_id). Package metadata will be unavailable: ${e.message}")
+                    err.println("Failed to parse ContainerHeader ($chunk_id). Package metadata will be unavailable: ${e.message}")
                 }
             }
 
             return container
         }
 
-        fun open(toc_path: String, config: Config): IoStoreContainer = open(Path.of(toc_path), config)
+        fun open(toc_path: String, config: Config, err: PrintStream = System.err): IoStoreContainer = open(Path.of(toc_path), config, err)
     }
 
     // Rust: retoc/src/iostore.rs:438 container_path
@@ -485,22 +487,22 @@ class IoStoreContainer(
 
     override fun container_header_version(): EIoContainerHeaderVersion? = container_header?.version
 
-    override fun print_info(depth: Int) {
+    override fun print_info(depth: Int, console: Console) {
         var d = depth
-        indent_println(d, container_name())
+        console.indent_println(d, container_name())
         d += 1
-        indent_println(d, "container_id: ${toc.container_id}")
-        indent_println(d, "container_flags: ${toc.container_flags}")
-        indent_println(d, "version: ${toc.version}")
+        console.indent_println(d, "container_id: ${toc.container_id}")
+        console.indent_println(d, "container_flags: ${toc.container_flags}")
+        console.indent_println(d, "version: ${toc.version}")
         val mount_point = toc.directory_index.mount_point
         if (mount_point.isNotEmpty()) {
-            indent_println(d, "mount_point: $mount_point")
+            console.indent_println(d, "mount_point: $mount_point")
         }
-        indent_println(d, "chunks: ${toc.chunks.size}")
-        indent_println(d, "packages: ${packages().count()}")
+        console.indent_println(d, "chunks: ${toc.chunks.size}")
+        console.indent_println(d, "packages: ${packages().count()}")
         // assumes header has already been parsed
-        indent_println(d, "container_header_version: ${container_header?.version}")
-        indent_println(d, "compression_methods: ${toc.compression_methods}")
+        console.indent_println(d, "container_header_version: ${container_header?.version}")
+        console.indent_println(d, "compression_methods: ${toc.compression_methods}")
     }
 
     override fun read(chunk_id: FIoChunkId): ByteArray {

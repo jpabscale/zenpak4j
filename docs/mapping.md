@@ -162,6 +162,58 @@ val ret = compressHandle.invokeWithArguments(compressor.value, rawSeg, rawLen.to
 | `repak` (`repak`, `oodle_loader`, `repak_cli`) | `com.github.jpabscale.zenpak4j.repak` / `...oodle_loader` / `...repak_cli` (`Clikt 5` `RepakCli` `Info`/`List`/`HashList`/`Unpack`/`Pack`/`Get`, `AesKey` hex/`Base64` `0x` + `STANDARD_NO_PAD`) |
 | `retoc` (`retoc`, `retoc_cli`, `load_logger`) | `com.github.jpabscale.zenpak4j.retoc` / `...retoc_cli` (`12` subcommands `to-zen`/`to-legacy` `manifest` etc., `Config` `aes_keys` + `EngineVersion` `UE4_25`→`UE5_7`) / `...load_logger` (`ProxyDll` `d3d9`/`d3d11` `FFM` no-op on Linux) |
 
+## 13. Stdout/stderr in an embedded process (`Console`)
+
+Rust CLI actions print with `println!`/`print!` to the process stdout and write CLI-visible
+diagnostics to stderr (`Log` Error+ lines in `StdoutLogBackend`, the `eprintln!` ContainerHeader
+warning in `iostore.rs`, the fork's composite-container warnings). The port keeps those
+statements verbatim but makes stdout-writing functions **extension functions on
+`Console(out: PrintStream = System.out, err: PrintStream = System.err)`**, whose `println`
+member is the direct translation target of the Rust `println!` macro; stderr writes take the
+`err` stream explicitly (`System.err.println` → `err.println`). Rust-shaped top-level entries
+remain as delegating wrappers (`fun action_x(...) = Console().action_x(...)`), so the CLIs keep
+their default behavior. `Log::new_stdout(verbose, debug)` becomes `console.new_log(verbose, debug)`
+(same levels, same line format, `PrintStreamLogBackend(out, err)`; Error+ keeps the
+`StdoutLogBackend` split). Embedders pass their own streams and get no output on the host's
+stdout or stderr. Wire format is untouched; only declaration form and call sites diverge.
+Markers: `//@parity:on EXC-016` / `//@parity:off EXC-016` around the `Console` class and
+`PrintStreamLogBackend`; the individual receiver declarations and `err` parameters are unwrapped
+(same pattern as EXC-001's context threading).
+
+Implementation notes (2026-09-22):
+
+- Non-extension members that must dispatch polymorphically take the console as an explicit
+  param (EXC-001-style context threading): `IoStoreTrait.print_info(depth, console)` and the
+  `Output` sealed class, where `Output.Stdout(console)`/`Output.Progress(bar, console)` both
+  write through `console.println`. Inside an extension the receiver is passed as `this`
+  (`iostore.print_info(0, this)`, `Output.Stdout(this)`).
+- `ZenScriptObjects.print()` becomes `fun Console.print(obj: ZenScriptObjects)` (decision 4:
+  console stays the receiver); the call site becomes `print(script_objects)` — receiver moved
+  to the argument. `Console` therefore declares no `print(msg: Any?)` member: a member would
+  shadow the extension (Kotlin members beat extensions on the same receiver — verified with
+  kotlinc), and the pinned Rust sources contain no bare `print!` call site to translate.
+- `retoc/host.kt` holds `fun Console.new_log(...)` (the `:retoc`→`:repak` binding); the
+  `Console` class lives in `:repak`, `PrintStreamLogBackend` in `retoc/logging.kt` next to
+  `StdoutLogBackend` (Error+ lines keep the same stderr split, so CLI stderr stays
+  byte-identical too).
+- Stderr has no receiver form, so the iostore open family takes the stream explicitly:
+  `open`/`open_with_container_paths`/`IoStoreBackend.open`/`open_paths`/`IoStoreContainer.open`
+  gain `err: PrintStream = System.err`, and the composite-container and ContainerHeader
+  warnings write through it. Actions pass the receiver's `err`; `ZenPakService` passes
+  `err ?: System.err`. The CLI-only `dump-test` action keeps the default.
+- `ZenPakService` printing entry points take `out: PrintStream? = null, err: PrintStream? =
+  null` (null = `System.out`/`System.err`, today's behavior) and build
+  `Console(out ?: System.out, err ?: System.err)`.
+- Delegating wrappers exist only for CLI-shaped entry points. Internal helpers exist only in
+  receiver form (`action_to_zen_reader`, `action_to_legacy_inner`/`_assets`/`_shaders`, both
+  `indent_println` overloads); `:actions`/`:zenpak` thread the receiver (`this`). External
+  callers of those helpers move to the receiver form when they recompile.
+- The seam is enforced, not just documented: `tools/audit_parity.py` fails on direct
+  `System.out` / `System.err` / `kotlin.io.print` writes in `:repak`/`:retoc`/`:actions`/
+  `:zenpak` main sources (the pin-shaped `StdoutLogBackend` is allowlisted), and `ConsoleTest`
+  asserts `Console` declares no `print` member (a member would shadow the `script_objects.rs`
+  print extension; members beat extensions).
+
 ## Changelog
 
 - 2026-08-19: init (pinned `trumank/repak@355b5f6`, `trumank/retoc@885a8da`, forks `jpabscale/*`).
@@ -171,4 +223,5 @@ val ret = compressHandle.invokeWithArguments(compressor.value, rawSeg, rawLen.to
 - 2026-08-20: detekt `1.23.8` minimal (`buildUponDefaultConfig false`, `FunctionNaming`/`PackageNaming` `_` allowed, `jvmTarget 21` + fake `java.version=21` for `Kotlin 1.9` `25.0.4.1` parse bug) `0` smells, `check` green.
 - 2026-08-20: `retoc` `container_header` `StoreEntries` `16 B` fix + `asset_registry` `CityHash` `33..64` `*mul` + `compact_binary` `22522` entries + `legacy_asset`/`zen`/`zen_asset_conversion` `10` fixtures + `asset_conversion` `Randy`/`BP_Table_Lamp` → `23`→`43` tests (`AssetRegistry 8`, `CompactBinary 2`, `ContainerHeader 5`, `Toc 8`, `IStore 3`, `LegacyAsset 5`, `ShaderLibrary 6`, `ScriptObjects 2`, `Zen 1`, `ZenAssetConversion 2`, `AssetConversion 2`) `BUILD SUCCESSFUL` (added `bcprov` `Blake3` `2g` heap, `kotlinx-serialization` not needed).
 - 2026-08-20: `repak-cli` full `Clikt` `608` parity (`Channel(0)` rendezvous + `parallelStream`, `AesKey` `hex`/`Base64`, `glob` `include`, `mount` guard) + `retoc-cli` `12` subcommands stub→full + `iostore_writer` `blake3` + `version_heuristics` candidate list + `load-logger` `FFM` `ProxyDll` → `43` `retoc` tests, `repak` `66`, `check` `24` tasks green.
+- 2026-09-22: embedder stdout/stderr seam (`EXC-016`, §13) — `Console(out, err)` receiver extensions + one-line delegating wrappers, `out`/`err` service entry points, `PrintStreamLogBackend`/`console.new_log`, iostore `err` threading for warnings; CLI stdout/stderr byte-identical (manual before/after captures), wire format untouched.
 
